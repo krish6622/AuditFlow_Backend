@@ -65,6 +65,22 @@ class Settings(BaseSettings):
             return [origin.strip() for origin in v.split(",") if origin.strip()]
         return v
 
+    @field_validator("DATABASE_URL", mode="before")
+    @classmethod
+    def _normalize_db_driver(cls, v: object) -> object:
+        """Pin the psycopg (v3) driver on bare Postgres URLs.
+
+        Hosts like Railway/Neon hand out ``postgres://`` / ``postgresql://``
+        URLs. SQLAlchemy would default those to psycopg2, which we don't ship
+        (we use psycopg v3), so connecting fails at startup. Rewrite the scheme
+        to ``postgresql+psycopg://`` unless a driver is already specified.
+        """
+        if isinstance(v, str):
+            for scheme in ("postgresql://", "postgres://"):
+                if v.startswith(scheme):
+                    return "postgresql+psycopg://" + v[len(scheme):]
+        return v
+
     @property
     def is_production(self) -> bool:
         return self.ENVIRONMENT.lower() == "production"
