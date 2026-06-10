@@ -1,0 +1,26 @@
+# ---- Web framework ----
+fastapi==0.115.6
+uvicorn[standard]==0.34.0
+python-multipart==0.0.20
+
+# ---- Data / ORM ----
+sqlalchemy==2.0.46
+alembic==1.16.5
+psycopg[binary]==3.2.13
+
+# ---- Validation / settings ----
+pydantic==2.12.5
+pydantic-settings==2.11.0
+email-validator==2.2.0
+
+# ---- Security ----
+PyJWT==2.10.1
+bcrypt==5.0.0
+
+# ---- Storage / PDF (used from Phase 5 onward) ----
+boto3==1.35.90
+reportlab==4.2.5
+
+# ---- Testing ----
+pytest==8.3.4
+httpx==0.28.1
