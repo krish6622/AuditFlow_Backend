@@ -21,7 +21,7 @@ from sqlalchemy.dialects.postgresql import UUID as PGUUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base, TimestampMixin, UUIDPrimaryKeyMixin
-from app.models.enums import UserRole, UserStatus, pg_enum
+from app.models.enums import UserRole, pg_enum
 
 if TYPE_CHECKING:
     from app.models.organization import Organization
@@ -53,20 +53,7 @@ class User(UUIDPrimaryKeyMixin, TimestampMixin, Base):
         pg_enum(UserRole, "user_role"),
         nullable=False,
     )
-    # Lifecycle state. Self-registrations start PENDING_APPROVAL; admin-created
-    # users are ACTIVE. ``is_active`` mirrors this (only ACTIVE is sign-in-able)
-    # and remains the canonical flag the login/RBAC guards read.
-    status: Mapped[UserStatus] = mapped_column(
-        pg_enum(UserStatus, "user_status"),
-        default=UserStatus.ACTIVE,
-        nullable=False,
-        index=True,
-    )
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
-
-    @property
-    def is_pending(self) -> bool:
-        return self.status == UserStatus.PENDING_APPROVAL
 
     # ---- Soft delete (employees are never physically removed) ----
     deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))

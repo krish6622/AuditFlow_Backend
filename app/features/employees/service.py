@@ -18,7 +18,7 @@ from app.core.security import hash_password
 from app.features.audit.repository import AuditRepository
 from app.features.employees import schemas
 from app.features.employees.repository import EmployeeRepository
-from app.models.enums import AuditAction, UserRole, UserStatus
+from app.models.enums import AuditAction, UserRole
 from app.models.user import User
 
 logger = get_logger(__name__)
@@ -30,7 +30,6 @@ ACTIVE_WORK_ORDERS_MESSAGE = (
     "This employee has active work orders. Reassign or complete them before deletion."
 )
 SELF_DELETE_MESSAGE = "You cannot delete your own account."
-NOT_PENDING_MESSAGE = "This account is not awaiting approval."
 
 
 class EmployeeService:
@@ -85,8 +84,6 @@ class EmployeeService:
             designation=(data.designation or "").strip() or None,
             hashed_password=hash_password(data.password),
             is_active=data.is_active,
-            # Admin-provisioned accounts skip the approval queue.
-            status=UserStatus.ACTIVE if data.is_active else UserStatus.INACTIVE,
         )
         self.repo.add(employee)
         self.db.commit()
@@ -140,7 +137,6 @@ class EmployeeService:
             raise ConflictError(LAST_ADMIN_MESSAGE)
 
         member.is_active = is_active
-        member.status = UserStatus.ACTIVE if is_active else UserStatus.INACTIVE
         self.audit.record(
             organization_id=org_id,
             performed_by_user_id=admin.id,
@@ -182,7 +178,6 @@ class EmployeeService:
         member.deleted_by = admin.id
         member.deleted_employee_name = deleted_label
         member.is_active = False
-        member.status = UserStatus.INACTIVE
         self.repo.restamp_work_order_names(user_id=member.id, label=deleted_label)
 
         self.audit.record(
@@ -194,55 +189,6 @@ class EmployeeService:
         self.db.commit()
         self.db.refresh(member)
         logger.info("User %s soft-deleted (by %s)", member.id, admin.id)
-        return member
-
-    def approve(self, admin: User, employee_id: uuid.UUID) -> User:
-        """Approve a pending self-registration: PENDING_APPROVAL -> ACTIVE.
-
-        The user keeps role EMPLOYEE and can sign in afterwards. Recorded in the
-        audit log. Only pending accounts may be approved (409 otherwise)."""
-        org_id = self._org(admin)
-        member = self.get(admin, employee_id)
-
-        if member.status != UserStatus.PENDING_APPROVAL:
-            raise ConflictError(NOT_PENDING_MESSAGE)
-
-        member.status = UserStatus.ACTIVE
-        member.is_active = True
-        self.audit.record(
-            organization_id=org_id,
-            performed_by_user_id=admin.id,
-            affected_user_id=member.id,
-            action=AuditAction.USER_APPROVED,
-        )
-        self.db.commit()
-        self.db.refresh(member)
-        logger.info("User %s approved (by %s)", member.id, admin.id)
-        return member
-
-    def reject(self, admin: User, employee_id: uuid.UUID) -> User:
-        """Reject a pending self-registration: PENDING_APPROVAL -> INACTIVE.
-
-        The record is kept (so the email stays reserved and the decision is
-        auditable) but the user cannot sign in. Only pending accounts may be
-        rejected (409 otherwise)."""
-        org_id = self._org(admin)
-        member = self.get(admin, employee_id)
-
-        if member.status != UserStatus.PENDING_APPROVAL:
-            raise ConflictError(NOT_PENDING_MESSAGE)
-
-        member.status = UserStatus.INACTIVE
-        member.is_active = False
-        self.audit.record(
-            organization_id=org_id,
-            performed_by_user_id=admin.id,
-            affected_user_id=member.id,
-            action=AuditAction.USER_REJECTED,
-        )
-        self.db.commit()
-        self.db.refresh(member)
-        logger.info("User %s rejected (by %s)", member.id, admin.id)
         return member
 
     def set_role(

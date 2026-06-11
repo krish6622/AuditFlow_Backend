@@ -27,7 +27,7 @@ from app.core.exceptions import (
     ValidationError,
 )
 from app.core.logging import get_logger
-from app.models.enums import UserRole, UserStatus
+from app.models.enums import UserRole
 from app.core.security import (
     create_access_token,
     create_password_reset_token,
@@ -41,9 +41,6 @@ from app.features.auth.repository import AuthRepository
 from app.models.user import User
 
 logger = get_logger(__name__)
-
-# Shown when a still-pending account attempts to sign in (business requirement 7).
-PENDING_APPROVAL_MESSAGE = "Your account is awaiting administrator approval."
 
 
 class AuthService:
@@ -73,12 +70,11 @@ class AuthService:
     # ------------------------------------------------------------------ #
     # Register (public self-serve sign-up)
     # ------------------------------------------------------------------ #
-    def register(self, data: schemas.RegisterRequest) -> schemas.RegisterResponse:
+    def register(self, data: schemas.RegisterRequest) -> schemas.TokenResponse:
         """Self-serve sign-up for this internal, single-tenant application.
 
-        New users join the one organization as an EMPLOYEE with status
-        PENDING_APPROVAL — never as an admin, and never auto-logged-in. They
-        cannot sign in until an administrator approves the account.
+        New users join the one organization as an EMPLOYEE (never an admin) and
+        are signed in immediately — there is no approval step.
         """
         email = data.email.lower().strip()
         if self.repo.email_exists(email):
@@ -95,24 +91,18 @@ class AuthService:
                 slug=self._unique_slug(settings.SUPERADMIN_ORG_NAME),
             )
 
-        self.repo.create_user(
+        user = self.repo.create_user(
             organization_id=org.id,
             email=email,
             hashed_password=hash_password(data.password),
             full_name=full_name,
             role=UserRole.EMPLOYEE,
-            status=UserStatus.PENDING_APPROVAL,
         )
 
+        tokens = self._issue_tokens(user)
         self.db.commit()
-        logger.info("New user %s registered (pending approval)", email)
-        return schemas.RegisterResponse(
-            message=(
-                "Registration successful. Your account is awaiting administrator "
-                "approval — you'll be able to sign in once it's approved."
-            ),
-            status=UserStatus.PENDING_APPROVAL.value,
-        )
+        logger.info("New user %s registered", email)
+        return tokens
 
     def _unique_slug(self, name: str) -> str:
         base = _slugify(name) or "org"
@@ -135,8 +125,6 @@ class AuthService:
         )
         if not user or not password_ok:
             raise AuthenticationError("Incorrect email or password")
-        if user.status == UserStatus.PENDING_APPROVAL:
-            raise AuthenticationError(PENDING_APPROVAL_MESSAGE)
         if not user.is_active:
             raise AuthenticationError("User account is deactivated")
         if (

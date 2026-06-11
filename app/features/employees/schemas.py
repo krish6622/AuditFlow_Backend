@@ -6,7 +6,7 @@ from datetime import datetime
 
 from pydantic import BaseModel, ConfigDict, EmailStr, Field
 
-from app.models.enums import UserRole, UserStatus
+from app.models.enums import UserRole
 
 
 class EmployeeCreate(BaseModel):
@@ -48,7 +48,6 @@ class EmployeeRead(BaseModel):
     email: EmailStr | None
     designation: str | None
     role: UserRole
-    status: UserStatus
     is_active: bool
     created_at: datetime
     deleted_at: datetime | None = None

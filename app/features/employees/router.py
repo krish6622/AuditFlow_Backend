@@ -25,9 +25,7 @@ def list_employees(
     current_user: User = Depends(require_permissions(rbac.EMPLOYEE_VIEW)),
     service: EmployeeService = Depends(get_service),
     search: str | None = Query(default=None, max_length=255),
-    status_filter: str | None = Query(
-        default=None, alias="status", pattern="^(active|inactive|pending|pending_approval)$"
-    ),
+    status_filter: str | None = Query(default=None, alias="status", pattern="^(active|inactive)$"),
     include_deleted: bool = Query(default=False),
 ) -> list[schemas.EmployeeRead]:
     members = service.list(
@@ -79,28 +77,6 @@ def set_employee_role(
     return schemas.EmployeeRead.model_validate(
         service.set_role(current_user, employee_id, data.role)
     )
-
-
-@router.patch("/{employee_id}/approve", response_model=schemas.EmployeeRead)
-def approve_employee(
-    employee_id: uuid.UUID,
-    current_user: User = Depends(require_permissions(rbac.EMPLOYEE_MANAGE)),
-    service: EmployeeService = Depends(get_service),
-) -> schemas.EmployeeRead:
-    """Approve a pending self-registration (PENDING_APPROVAL -> ACTIVE). 409 if
-    the account isn't pending."""
-    return schemas.EmployeeRead.model_validate(service.approve(current_user, employee_id))
-
-
-@router.patch("/{employee_id}/reject", response_model=schemas.EmployeeRead)
-def reject_employee(
-    employee_id: uuid.UUID,
-    current_user: User = Depends(require_permissions(rbac.EMPLOYEE_MANAGE)),
-    service: EmployeeService = Depends(get_service),
-) -> schemas.EmployeeRead:
-    """Reject a pending self-registration (PENDING_APPROVAL -> INACTIVE). 409 if
-    the account isn't pending."""
-    return schemas.EmployeeRead.model_validate(service.reject(current_user, employee_id))
 
 
 @router.patch("/{employee_id}/activate", response_model=schemas.EmployeeRead)

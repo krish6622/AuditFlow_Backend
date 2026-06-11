@@ -11,7 +11,7 @@ from datetime import datetime, timezone
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from app.models.enums import SubscriptionStatus, UserRole, UserStatus
+from app.models.enums import SubscriptionStatus, UserRole
 from app.models.organization import Organization
 from app.models.token import PasswordResetToken, RefreshToken
 from app.models.user import User
@@ -100,7 +100,6 @@ class AuthRepository:
         hashed_password: str,
         full_name: str,
         role: UserRole,
-        status: UserStatus = UserStatus.ACTIVE,
     ) -> User:
         user = User(
             organization_id=organization_id,
@@ -108,8 +107,7 @@ class AuthRepository:
             hashed_password=hashed_password,
             full_name=full_name,
             role=role,
-            status=status,
-            is_active=(status == UserStatus.ACTIVE),
+            is_active=True,
         )
         self.db.add(user)
         self.db.flush()

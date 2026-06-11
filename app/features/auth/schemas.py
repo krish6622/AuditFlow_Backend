@@ -6,7 +6,7 @@ from datetime import datetime
 
 from pydantic import BaseModel, ConfigDict, EmailStr, Field
 
-from app.models.enums import UserRole, UserStatus
+from app.models.enums import UserRole
 
 
 # --------------------------------------------------------------------------- #
@@ -73,7 +73,6 @@ class UserProfile(BaseModel):
     phone: str | None
     designation: str | None
     role: UserRole
-    status: UserStatus
     organization_id: uuid.UUID | None
     is_active: bool
     created_at: datetime
@@ -81,14 +80,6 @@ class UserProfile(BaseModel):
 
 class MessageResponse(BaseModel):
     message: str
-
-
-class RegisterResponse(BaseModel):
-    """Sign-up result. No tokens are issued — the account must be approved by an
-    administrator before it can sign in."""
-
-    message: str
-    status: str
 
 
 class ForgotPasswordResponse(BaseModel):
