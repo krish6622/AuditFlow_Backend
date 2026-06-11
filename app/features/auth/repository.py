@@ -54,11 +54,37 @@ class AuthRepository:
         stmt = select(User.id).where(func.lower(User.email) == email.lower()).limit(1)
         return self.db.execute(stmt).first() is not None
 
+    def phone_exists(self, phone: str) -> bool:
+        stmt = select(User.id).where(User.phone == phone.strip()).limit(1)
+        return self.db.execute(stmt).first() is not None
+
     def slug_exists(self, slug: str) -> bool:
         stmt = select(Organization.id).where(Organization.slug == slug).limit(1)
         return self.db.execute(stmt).first() is not None
 
-    # ---- Sign-up (organization + first admin) ----
+    # ---- Sign-up (single-tenant: everyone joins the one organization) ----
+    def get_default_organization(self) -> Organization | None:
+        """The organization self-registrations join.
+
+        This is an internal, single-tenant app: new employees join the
+        organization run by the business. We resolve that as the org of the
+        founding (earliest-created) admin — deterministic, and robust to any
+        legacy orgs left over from earlier multi-org behaviour. Falls back to the
+        earliest org if no admin exists yet.
+        """
+        by_admin = (
+            select(Organization)
+            .join(User, User.organization_id == Organization.id)
+            .where(User.role == UserRole.ADMIN, User.deleted_at.is_(None))
+            .order_by(User.created_at.asc())
+            .limit(1)
+        )
+        org = self.db.execute(by_admin).scalars().first()
+        if org is not None:
+            return org
+        earliest = select(Organization).order_by(Organization.created_at.asc()).limit(1)
+        return self.db.execute(earliest).scalars().first()
+
     def create_organization(self, *, name: str, slug: str) -> Organization:
         org = Organization(
             name=name,
@@ -74,14 +100,16 @@ class AuthRepository:
         self,
         *,
         organization_id: uuid.UUID,
-        email: str,
         hashed_password: str,
         full_name: str,
         role: UserRole,
+        email: str | None = None,
+        phone: str | None = None,
     ) -> User:
         user = User(
             organization_id=organization_id,
-            email=email.lower(),
+            email=email.lower() if email else None,
+            phone=phone,
             hashed_password=hashed_password,
             full_name=full_name,
             role=role,

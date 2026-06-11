@@ -26,8 +26,9 @@ def register(
     data: schemas.RegisterRequest,
     service: AuthService = Depends(get_auth_service),
 ) -> schemas.TokenResponse:
-    """Public sign-up: creates a new organization + its Organization Admin and
-    returns an access/refresh token pair (auto-login)."""
+    """Public sign-up: creates an EMPLOYEE in the organization and signs them in
+    (returns an access/refresh token pair). Internal, single-tenant app — no new
+    organization is created and admin access is never granted automatically."""
     return service.register(data)
 
 

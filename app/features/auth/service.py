@@ -71,26 +71,49 @@ class AuthService:
     # Register (public self-serve sign-up)
     # ------------------------------------------------------------------ #
     def register(self, data: schemas.RegisterRequest) -> schemas.TokenResponse:
-        email = data.email.lower().strip()
-        if self.repo.email_exists(email):
+        """Self-serve sign-up for this internal, single-tenant application.
+
+        New users join the one organization as an EMPLOYEE (never an admin) and
+        are signed in immediately — there is no approval step.
+        """
+        # Sign up with an email and/or a mobile number — at least one is required
+        # (and either can later be used to sign in).
+        email = (data.email or "").lower().strip() or None
+        phone = (data.phone or "").strip() or None
+        if not email and not phone:
+            raise ValidationError("Provide an email address or a mobile number")
+
+        if email and self.repo.email_exists(email):
             raise ConflictError("An account with this email already exists")
+        if phone and self.repo.phone_exists(phone):
+            raise ConflictError("An account with this mobile number already exists")
 
-        full_name = (data.full_name or "").strip() or _name_from_email(email)
-        org_name = (data.organization_name or "").strip() or f"{full_name}'s Organization"
-        slug = self._unique_slug(org_name)
+        full_name = (
+            (data.full_name or "").strip()
+            or (_name_from_email(email) if email else "New User")
+        )
 
-        org = self.repo.create_organization(name=org_name, slug=slug)
+        # Single-tenant: attach to the existing organization. Bootstrap one only
+        # if the app has never been seeded (so the very first sign-up still works).
+        org = self.repo.get_default_organization()
+        if org is None:
+            org = self.repo.create_organization(
+                name=settings.SUPERADMIN_ORG_NAME,
+                slug=self._unique_slug(settings.SUPERADMIN_ORG_NAME),
+            )
+
         user = self.repo.create_user(
             organization_id=org.id,
             email=email,
+            phone=phone,
             hashed_password=hash_password(data.password),
             full_name=full_name,
-            role=UserRole.ADMIN,
+            role=UserRole.EMPLOYEE,
         )
 
         tokens = self._issue_tokens(user)
         self.db.commit()
-        logger.info("New organization '%s' registered by %s", org_name, email)
+        logger.info("New user %s registered", email or phone)
         return tokens
 
     def _unique_slug(self, name: str) -> str:
