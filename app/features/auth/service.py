@@ -76,11 +76,22 @@ class AuthService:
         New users join the one organization as an EMPLOYEE (never an admin) and
         are signed in immediately — there is no approval step.
         """
-        email = data.email.lower().strip()
-        if self.repo.email_exists(email):
-            raise ConflictError("An account with this email already exists")
+        # Sign up with an email and/or a mobile number — at least one is required
+        # (and either can later be used to sign in).
+        email = (data.email or "").lower().strip() or None
+        phone = (data.phone or "").strip() or None
+        if not email and not phone:
+            raise ValidationError("Provide an email address or a mobile number")
 
-        full_name = (data.full_name or "").strip() or _name_from_email(email)
+        if email and self.repo.email_exists(email):
+            raise ConflictError("An account with this email already exists")
+        if phone and self.repo.phone_exists(phone):
+            raise ConflictError("An account with this mobile number already exists")
+
+        full_name = (
+            (data.full_name or "").strip()
+            or (_name_from_email(email) if email else "New User")
+        )
 
         # Single-tenant: attach to the existing organization. Bootstrap one only
         # if the app has never been seeded (so the very first sign-up still works).
@@ -94,6 +105,7 @@ class AuthService:
         user = self.repo.create_user(
             organization_id=org.id,
             email=email,
+            phone=phone,
             hashed_password=hash_password(data.password),
             full_name=full_name,
             role=UserRole.EMPLOYEE,
@@ -101,7 +113,7 @@ class AuthService:
 
         tokens = self._issue_tokens(user)
         self.db.commit()
-        logger.info("New user %s registered", email)
+        logger.info("New user %s registered", email or phone)
         return tokens
 
     def _unique_slug(self, name: str) -> str:

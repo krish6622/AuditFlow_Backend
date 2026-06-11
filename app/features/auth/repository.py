@@ -54,6 +54,10 @@ class AuthRepository:
         stmt = select(User.id).where(func.lower(User.email) == email.lower()).limit(1)
         return self.db.execute(stmt).first() is not None
 
+    def phone_exists(self, phone: str) -> bool:
+        stmt = select(User.id).where(User.phone == phone.strip()).limit(1)
+        return self.db.execute(stmt).first() is not None
+
     def slug_exists(self, slug: str) -> bool:
         stmt = select(Organization.id).where(Organization.slug == slug).limit(1)
         return self.db.execute(stmt).first() is not None
@@ -96,14 +100,16 @@ class AuthRepository:
         self,
         *,
         organization_id: uuid.UUID,
-        email: str,
         hashed_password: str,
         full_name: str,
         role: UserRole,
+        email: str | None = None,
+        phone: str | None = None,
     ) -> User:
         user = User(
             organization_id=organization_id,
-            email=email.lower(),
+            email=email.lower() if email else None,
+            phone=phone,
             hashed_password=hashed_password,
             full_name=full_name,
             role=role,

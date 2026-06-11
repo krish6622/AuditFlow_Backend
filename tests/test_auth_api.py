@@ -107,3 +107,45 @@ def test_forgot_password_unknown_email_is_uniform(client, org_admin) -> None:
     # Same 200 + message regardless of account existence (no enumeration).
     assert resp.status_code == 200
     assert resp.json()["reset_token"] is None
+
+
+# --------------------------------------------------------------------------- #
+# Registration by email and/or mobile number
+# --------------------------------------------------------------------------- #
+def test_register_with_phone_only(client, org_admin) -> None:
+    resp = client.post(
+        "/api/v1/auth/register",
+        json={"phone": "9555000111", "password": "Password123!", "full_name": "Phone User"},
+    )
+    assert resp.status_code == 201, resp.text
+    assert resp.json()["access_token"]
+    # The new account can then sign in using the mobile number.
+    assert _login(client, "9555000111", "Password123!").status_code == 200
+
+
+def test_register_with_email_only(client, org_admin) -> None:
+    resp = client.post(
+        "/api/v1/auth/register",
+        json={"email": "byemail@acme.example.com", "password": "Password123!"},
+    )
+    assert resp.status_code == 201
+    assert _login(client, "byemail@acme.example.com", "Password123!").status_code == 200
+
+
+def test_register_requires_email_or_phone(client, org_admin) -> None:
+    resp = client.post("/api/v1/auth/register", json={"password": "Password123!"})
+    assert resp.status_code == 422
+    assert resp.json()["error"]["code"] == "validation_error"
+
+
+def test_register_duplicate_phone_conflicts(client, org_admin) -> None:
+    body = {"phone": "9555000222", "password": "Password123!"}
+    assert client.post("/api/v1/auth/register", json=body).status_code == 201
+    assert client.post("/api/v1/auth/register", json=body).status_code == 409
+
+
+def test_login_by_phone(client, employee) -> None:
+    # ``employee`` fixture signs in with its phone number (9000000001).
+    resp = _login(client, "9000000001", "Password123!")
+    assert resp.status_code == 200
+    assert resp.json()["access_token"]
