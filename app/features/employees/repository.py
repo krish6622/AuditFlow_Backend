@@ -1,4 +1,9 @@
-"""Data access for employees (users with role ``employee``), org-scoped."""
+"""Data access for organization members (admins and employees), org-scoped.
+
+The list/get surface returns every user in the organization — both ADMIN and
+EMPLOYEE — so admins can be shown and demoted. Role/status changes still flow
+through the service, which enforces the business rules (e.g. last-admin guard).
+"""
 from __future__ import annotations
 
 import uuid
@@ -19,7 +24,6 @@ class EmployeeRepository:
     ) -> list[User]:
         filters = [
             User.organization_id == organization_id,
-            User.role == UserRole.EMPLOYEE,
         ]
         if search:
             like = f"%{search.strip()}%"
@@ -40,9 +44,21 @@ class EmployeeRepository:
         stmt = select(User).where(
             User.id == user_id,
             User.organization_id == organization_id,
-            User.role == UserRole.EMPLOYEE,
         )
         return self.db.execute(stmt).scalar_one_or_none()
+
+    def count_active_admins(self, *, organization_id: uuid.UUID) -> int:
+        """Number of active ADMIN users in the organization (last-admin guard)."""
+        stmt = (
+            select(func.count())
+            .select_from(User)
+            .where(
+                User.organization_id == organization_id,
+                User.role == UserRole.ADMIN,
+                User.is_active.is_(True),
+            )
+        )
+        return self.db.execute(stmt).scalar_one()
 
     def email_taken(self, email: str, *, exclude_id: uuid.UUID | None = None) -> bool:
         stmt = select(User.id).where(func.lower(User.email) == email.lower())

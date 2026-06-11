@@ -57,6 +57,23 @@ def update_employee(
     return schemas.EmployeeRead.model_validate(service.update(current_user, employee_id, data))
 
 
+@router.patch("/{employee_id}/role", response_model=schemas.EmployeeRead)
+def set_employee_role(
+    employee_id: uuid.UUID,
+    data: schemas.EmployeeRoleUpdate,
+    current_user: User = Depends(require_permissions(rbac.EMPLOYEE_MANAGE)),
+    service: EmployeeService = Depends(get_service),
+) -> schemas.EmployeeRead:
+    """Promote an employee to ADMIN or demote an admin to EMPLOYEE.
+
+    Blocks removing the last active admin (409). The change is recorded in the
+    audit log.
+    """
+    return schemas.EmployeeRead.model_validate(
+        service.set_role(current_user, employee_id, data.role)
+    )
+
+
 @router.patch("/{employee_id}/status", response_model=schemas.EmployeeRead)
 def set_employee_status(
     employee_id: uuid.UUID,
@@ -64,7 +81,7 @@ def set_employee_status(
     current_user: User = Depends(require_permissions(rbac.EMPLOYEE_MANAGE)),
     service: EmployeeService = Depends(get_service),
 ) -> schemas.EmployeeRead:
-    """Activate or deactivate an employee."""
+    """Activate or deactivate a member. Blocks deactivating the last active admin (409)."""
     return schemas.EmployeeRead.model_validate(
         service.set_active(current_user, employee_id, data.is_active)
     )

@@ -6,6 +6,8 @@ from datetime import datetime
 
 from pydantic import BaseModel, ConfigDict, EmailStr, Field
 
+from app.models.enums import UserRole
+
 
 class EmployeeCreate(BaseModel):
     full_name: str = Field(min_length=1, max_length=255)
@@ -31,6 +33,12 @@ class EmployeeStatusUpdate(BaseModel):
     is_active: bool
 
 
+class EmployeeRoleUpdate(BaseModel):
+    """Promote (EMPLOYEE -> ADMIN) or demote (ADMIN -> EMPLOYEE)."""
+
+    role: UserRole
+
+
 class EmployeeRead(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -39,5 +47,6 @@ class EmployeeRead(BaseModel):
     phone: str | None
     email: EmailStr | None
     designation: str | None
+    role: UserRole
     is_active: bool
     created_at: datetime

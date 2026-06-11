@@ -1,8 +1,8 @@
-"""User model — covers super admins, organization admins, and employees.
+"""User model — organization admins and employees.
 
-Tenancy rule: ``organization_id`` is NULL only for ``SUPER_ADMIN`` (platform
-scope). Every other role MUST belong to exactly one organization. This is
-enforced by a CHECK constraint so the database itself rejects inconsistent rows.
+Tenancy rule: every user belongs to exactly one organization (``organization_id``
+is NOT NULL). The role (``ADMIN`` / ``EMPLOYEE``) determines what they may do
+within that organization; see ``app.core.rbac``.
 """
 from __future__ import annotations
 
@@ -11,7 +11,6 @@ from typing import TYPE_CHECKING, List
 
 from sqlalchemy import (
     Boolean,
-    CheckConstraint,
     ForeignKey,
     String,
     UniqueConstraint,
@@ -31,21 +30,15 @@ if TYPE_CHECKING:
 class User(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     __tablename__ = "users"
     __table_args__ = (
-        # Email is unique per tenant; super admins (NULL org) are globally unique
-        # via the partial index created in the migration.
+        # Email is unique per tenant (when provided; employees may sign in by phone).
         UniqueConstraint("organization_id", "email", name="uq_users_org_email"),
-        CheckConstraint(
-            "(role = 'super_admin' AND organization_id IS NULL) "
-            "OR (role <> 'super_admin' AND organization_id IS NOT NULL)",
-            name="ck_users_org_role_consistency",
-        ),
     )
 
-    organization_id: Mapped[uuid.UUID | None] = mapped_column(
+    organization_id: Mapped[uuid.UUID] = mapped_column(
         PGUUID(as_uuid=True),
         ForeignKey("organizations.id", ondelete="CASCADE"),
         index=True,
-        nullable=True,
+        nullable=False,
     )
 
     email: Mapped[str | None] = mapped_column(String(255), index=True)
@@ -61,7 +54,7 @@ class User(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
 
     # ---- Relationships ----
-    organization: Mapped["Organization | None"] = relationship(back_populates="users")
+    organization: Mapped["Organization"] = relationship(back_populates="users")
     refresh_tokens: Mapped[List["RefreshToken"]] = relationship(
         back_populates="user", cascade="all, delete-orphan"
     )

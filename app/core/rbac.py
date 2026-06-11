@@ -17,13 +17,14 @@ class Permission(str):
 
 
 # ---- Organizations ----
-ORG_MANAGE = "org:manage"            # create/update/delete any organization (platform)
-ORG_VIEW_OWN = "org:view_own"        # view/update the caller's own organization
-SYSTEM_STATS_VIEW = "system:stats"   # platform-wide statistics
+ORG_MANAGE = "org:manage"            # manage the organization's own settings
 
 # ---- Employees ----
 EMPLOYEE_MANAGE = "employee:manage"  # add/edit/activate/deactivate/assign roles
 EMPLOYEE_VIEW = "employee:view"
+
+# ---- Audit log ----
+AUDIT_VIEW = "audit:view"            # read the organization's audit trail
 
 # ---- Customers ----
 CUSTOMER_MANAGE = "customer:manage"
@@ -44,14 +45,14 @@ REPORT_VIEW = "report:view"
 
 
 _ROLE_PERMISSIONS: dict[UserRole, frozenset[str]] = {
-    UserRole.SUPER_ADMIN: frozenset(
-        {ORG_MANAGE, SYSTEM_STATS_VIEW}
-    ),
-    UserRole.ORG_ADMIN: frozenset(
+    # ADMIN runs the organization: staff, customers, work orders, invoices,
+    # the audit trail, and org settings.
+    UserRole.ADMIN: frozenset(
         {
-            ORG_VIEW_OWN,
+            ORG_MANAGE,
             EMPLOYEE_MANAGE,
             EMPLOYEE_VIEW,
+            AUDIT_VIEW,
             CUSTOMER_MANAGE,
             CUSTOMER_VIEW,
             WORKORDER_MANAGE,
@@ -61,9 +62,9 @@ _ROLE_PERMISSIONS: dict[UserRole, frozenset[str]] = {
             REPORT_VIEW,
         }
     ),
+    # EMPLOYEE is scoped to their own assigned work.
     UserRole.EMPLOYEE: frozenset(
         {
-            ORG_VIEW_OWN,
             WORKORDER_VIEW_ASSIGNED,
             WORKORDER_UPDATE_STATUS,
         }

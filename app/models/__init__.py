@@ -4,8 +4,10 @@ Importing this package registers every model on ``Base.metadata``. Alembic's
 ``env.py`` imports it so autogenerate sees the full schema.
 """
 from app.db.base import Base
+from app.models.audit_log import AuditLog
 from app.models.customer import Customer
 from app.models.enums import (
+    AuditAction,
     InvoiceStatus,
     SubscriptionStatus,
     UserRole,
@@ -39,7 +41,9 @@ __all__ = [
     "InvoiceItem",
     "InvoiceRecord",
     "InvoiceLineItem",
+    "AuditLog",
     "UserRole",
+    "AuditAction",
     "SubscriptionStatus",
     "WorkOrderStatus",
     "WorkOrderPriority",

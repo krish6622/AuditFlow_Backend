@@ -42,9 +42,10 @@ class Settings(BaseSettings):
     REFRESH_TOKEN_EXPIRE_DAYS: int = 7
     PASSWORD_RESET_EXPIRE_MINUTES: int = 30
 
-    # ---- Initial Super Admin ----
+    # ---- Bootstrap admin (seeded by `python -m app.cli seed-admin`) ----
     SUPERADMIN_EMAIL: str = "admin@keplercrew.com"
     SUPERADMIN_PASSWORD: str = "ChangeMe!2026"
+    SUPERADMIN_ORG_NAME: str = "AuditFlow Demo"
 
     # ---- Invoice module ----
     # Auto-generated invoice numbers look like: {PREFIX}-YYYYMMDD-NNN

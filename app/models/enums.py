@@ -28,11 +28,27 @@ def pg_enum(enum_cls: type[enum.Enum], name: str) -> SAEnum:
 
 
 class UserRole(str, enum.Enum):
-    """Application roles. Drives RBAC (see ``app.core.rbac``)."""
+    """Application roles. Drives RBAC (see ``app.core.rbac``).
 
-    SUPER_ADMIN = "super_admin"   # platform owner; not tied to an organization
-    ORG_ADMIN = "org_admin"       # owner/admin of a single organization
-    EMPLOYEE = "employee"         # field worker within an organization
+    A two-role model: every user belongs to exactly one organization and is
+    either its ADMIN (manages employees, work orders, invoices, org settings)
+    or an EMPLOYEE (field worker scoped to their own assigned work).
+    """
+
+    ADMIN = "admin"          # organization administrator
+    EMPLOYEE = "employee"    # field worker within an organization
+
+
+class AuditAction(str, enum.Enum):
+    """Security-sensitive actions recorded in ``audit_logs``.
+
+    Role changes carry ``old_role``/``new_role``; status changes leave them NULL.
+    """
+
+    ROLE_PROMOTED = "role_promoted"        # EMPLOYEE -> ADMIN
+    ROLE_DEMOTED = "role_demoted"          # ADMIN -> EMPLOYEE
+    STATUS_ACTIVATED = "status_activated"
+    STATUS_DEACTIVATED = "status_deactivated"
 
 
 class SubscriptionStatus(str, enum.Enum):

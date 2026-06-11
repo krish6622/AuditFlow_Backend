@@ -85,7 +85,7 @@ class AuthService:
             email=email,
             hashed_password=hash_password(data.password),
             full_name=full_name,
-            role=UserRole.ORG_ADMIN,
+            role=UserRole.ADMIN,
         )
 
         tokens = self._issue_tokens(user)

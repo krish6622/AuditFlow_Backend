@@ -14,18 +14,23 @@ from sqlalchemy.orm import Session
 from app.core.exceptions import ConflictError, NotFoundError, ValidationError
 from app.core.logging import get_logger
 from app.core.security import hash_password
+from app.features.audit.repository import AuditRepository
 from app.features.employees import schemas
 from app.features.employees.repository import EmployeeRepository
-from app.models.enums import UserRole
+from app.models.enums import AuditAction, UserRole
 from app.models.user import User
 
 logger = get_logger(__name__)
+
+# Surfaced to the client (and the UI) when a guard blocks removing the last admin.
+LAST_ADMIN_MESSAGE = "At least one Admin must exist in the organization."
 
 
 class EmployeeService:
     def __init__(self, db: Session) -> None:
         self.db = db
         self.repo = EmployeeRepository(db)
+        self.audit = AuditRepository(db)
 
     @staticmethod
     def _org(admin: User) -> uuid.UUID:
@@ -98,9 +103,77 @@ class EmployeeService:
         return emp
 
     def set_active(self, admin: User, employee_id: uuid.UUID, is_active: bool) -> User:
-        emp = self.get(admin, employee_id)
-        emp.is_active = is_active
+        org_id = self._org(admin)
+        member = self.get(admin, employee_id)
+
+        if member.is_active == is_active:
+            return member  # no-op — nothing to change or audit
+
+        # Business rule: never deactivate the last remaining active admin.
+        if (
+            not is_active
+            and member.role == UserRole.ADMIN
+            and member.is_active
+            and self.repo.count_active_admins(organization_id=org_id) <= 1
+        ):
+            raise ConflictError(LAST_ADMIN_MESSAGE)
+
+        member.is_active = is_active
+        self.audit.record(
+            organization_id=org_id,
+            performed_by_user_id=admin.id,
+            affected_user_id=member.id,
+            action=AuditAction.STATUS_ACTIVATED if is_active else AuditAction.STATUS_DEACTIVATED,
+        )
         self.db.commit()
-        self.db.refresh(emp)
-        logger.info("Employee %s active=%s", emp.id, is_active)
-        return emp
+        self.db.refresh(member)
+        logger.info("User %s active=%s (by %s)", member.id, is_active, admin.id)
+        return member
+
+    def set_role(
+        self, admin: User, employee_id: uuid.UUID, new_role: UserRole
+    ) -> User:
+        """Promote an employee to ADMIN or demote an admin to EMPLOYEE.
+
+        Authorization (only admins may call) is enforced by the route's
+        ``EMPLOYEE_MANAGE`` permission. ``get`` scopes lookup to the admin's own
+        organization, so cross-org targets surface as 404 (rule 6). Employees
+        lack the permission entirely, so they can never change any role (rule 5).
+        """
+        org_id = self._org(admin)
+        member = self.get(admin, employee_id)
+
+        if member.role == new_role:
+            return member  # no-op — already in the requested role
+
+        # Demotion (ADMIN -> EMPLOYEE) must not remove the last active admin.
+        # This also blocks the last admin demoting themselves (rule 2).
+        if (
+            member.role == UserRole.ADMIN
+            and new_role == UserRole.EMPLOYEE
+            and member.is_active
+            and self.repo.count_active_admins(organization_id=org_id) <= 1
+        ):
+            raise ConflictError(LAST_ADMIN_MESSAGE)
+
+        old_role = member.role
+        member.role = new_role
+        action = (
+            AuditAction.ROLE_PROMOTED
+            if new_role == UserRole.ADMIN
+            else AuditAction.ROLE_DEMOTED
+        )
+        self.audit.record(
+            organization_id=org_id,
+            performed_by_user_id=admin.id,
+            affected_user_id=member.id,
+            action=action,
+            old_role=old_role,
+            new_role=new_role,
+        )
+        self.db.commit()
+        self.db.refresh(member)
+        logger.info(
+            "User %s role %s -> %s (by %s)", member.id, old_role.value, new_role.value, admin.id
+        )
+        return member

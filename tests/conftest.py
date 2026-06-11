@@ -77,7 +77,7 @@ def client(engine: Engine, db_session: Session):
 
 @pytest.fixture
 def org_admin(db_session: Session):
-    """Create an active organization with one org-admin user."""
+    """Create an active organization with one ADMIN user."""
     from app.core.security import hash_password
     from app.models.enums import UserRole
     from app.models.organization import Organization
@@ -89,12 +89,79 @@ def org_admin(db_session: Session):
 
     user = User(
         organization_id=org.id,
-        email="admin@acme.test",
+        email="admin@acme.example.com",
         hashed_password=hash_password("Password123!"),
         full_name="Acme Admin",
-        role=UserRole.ORG_ADMIN,
+        role=UserRole.ADMIN,
         is_active=True,
     )
     db_session.add(user)
     db_session.commit()
     return user
+
+
+@pytest.fixture
+def employee(db_session: Session, org_admin):
+    """An active EMPLOYEE in the same organization as ``org_admin``."""
+    from app.core.security import hash_password
+    from app.models.enums import UserRole
+    from app.models.user import User
+
+    emp = User(
+        organization_id=org_admin.organization_id,
+        email="employee@acme.example.com",
+        phone="9000000001",
+        hashed_password=hash_password("Password123!"),
+        full_name="Acme Employee",
+        role=UserRole.EMPLOYEE,
+        is_active=True,
+    )
+    db_session.add(emp)
+    db_session.commit()
+    return emp
+
+
+@pytest.fixture
+def second_admin(db_session: Session, org_admin):
+    """A second ADMIN in the same organization (so the org isn't single-admin)."""
+    from app.core.security import hash_password
+    from app.models.enums import UserRole
+    from app.models.user import User
+
+    admin2 = User(
+        organization_id=org_admin.organization_id,
+        email="admin2@acme.example.com",
+        phone="9000000002",
+        hashed_password=hash_password("Password123!"),
+        full_name="Acme Admin Two",
+        role=UserRole.ADMIN,
+        is_active=True,
+    )
+    db_session.add(admin2)
+    db_session.commit()
+    return admin2
+
+
+@pytest.fixture
+def other_org_admin(db_session: Session):
+    """An ADMIN belonging to a DIFFERENT organization (cross-tenant tests)."""
+    from app.core.security import hash_password
+    from app.models.enums import UserRole
+    from app.models.organization import Organization
+    from app.models.user import User
+
+    org = Organization(name="Beta Electric", slug="beta-electric", is_active=True)
+    db_session.add(org)
+    db_session.flush()
+
+    admin = User(
+        organization_id=org.id,
+        email="admin@beta.example.com",
+        hashed_password=hash_password("Password123!"),
+        full_name="Beta Admin",
+        role=UserRole.ADMIN,
+        is_active=True,
+    )
+    db_session.add(admin)
+    db_session.commit()
+    return admin
