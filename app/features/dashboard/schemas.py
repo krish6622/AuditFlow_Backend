@@ -3,7 +3,6 @@ from __future__ import annotations
 
 import uuid
 from datetime import date
-from decimal import Decimal
 
 from pydantic import BaseModel, ConfigDict
 
@@ -14,7 +13,6 @@ class KpiTotals(BaseModel):
     work_orders: int
     completed_work_orders: int
     invoices: int
-    revenue: Decimal
     awaiting_assignment: int
 
 
@@ -24,7 +22,6 @@ class KpiDeltas(BaseModel):
     work_orders_pct: float | None
     completed_pct: float | None
     invoices_pct: float | None
-    revenue_pct: float | None
 
 
 class RecentWorkOrder(BaseModel):
@@ -36,7 +33,6 @@ class RecentWorkOrder(BaseModel):
     assigned_employee_name: str | None
     status: WorkOrderStatus
     due_date: date | None
-    amount: Decimal
 
 
 class DashboardSummary(BaseModel):

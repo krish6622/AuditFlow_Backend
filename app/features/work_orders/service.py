@@ -7,7 +7,6 @@ from __future__ import annotations
 
 import uuid
 from datetime import date, datetime, timezone
-from decimal import Decimal
 
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
@@ -157,14 +156,13 @@ class WorkOrderService:
             category=data.category,
             category_other=category_other,
             customer_name=data.customer_name.strip(),
-            contact_number=(data.contact_number or "").strip() or None,
+            contact_number=data.contact_number.strip(),
             assignee_id=assignee_id,
             assigned_employee_name=display_name,
             requested_by_id=user.id,
             description=data.description.strip(),
             priority=data.urgency,
             order_date=data.order_date or date.today(),
-            amount=data.amount if data.amount is not None else Decimal("0.00"),
             due_date=due_date,
             notes=(data.notes or "").strip() or None,
             status=status,
@@ -478,7 +476,10 @@ class WorkOrderService:
         elif wo.category == WorkOrderCategory.OTHERS and not (wo.category_other or "").strip():
             raise ValidationError("Please describe the category when 'Others' is selected")
         if "contact_number" in fields:
-            wo.contact_number = (fields["contact_number"] or "").strip() or None
+            value = (fields["contact_number"] or "").strip()
+            if not value:
+                raise ValidationError("Contact number is required.")
+            wo.contact_number = value
         if "urgency" in fields and fields["urgency"] is not None:
             wo.priority = fields["urgency"]
         if "order_date" in fields and fields["order_date"] is not None:
@@ -497,8 +498,6 @@ class WorkOrderService:
                 wo.assigned_employee_name = aname
             elif "assigned_employee_name" not in fields:
                 wo.assigned_employee_name = None
-        if "amount" in fields and fields["amount"] is not None:
-            wo.amount = fields["amount"]
         if "due_date" in fields:
             wo.due_date = fields["due_date"]
         if "notes" in fields:

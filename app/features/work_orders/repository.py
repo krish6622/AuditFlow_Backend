@@ -74,10 +74,9 @@ class WorkOrderRepository:
         return list(rows), int(total)
 
     def next_number(self, *, organization_id: uuid.UUID) -> str:
-        """Generate the next per-org, per-year work-order number, e.g.
-        ``WO-2026-0001``. The sequence resets each calendar year."""
-        year = datetime.now(timezone.utc).year
-        prefix = f"WO-{year}-"
+        """Generate the next per-org, per-day work-order number, e.g.
+        ``WO-20260611-01``. The sequence resets every calendar day."""
+        prefix = f"WO-{datetime.now(timezone.utc):%Y%m%d}-"
         numbers = self.db.execute(
             select(WorkOrder.number).where(
                 WorkOrder.organization_id == organization_id,
@@ -90,7 +89,7 @@ class WorkOrderRepository:
             match = re.search(r"(\d+)$", number or "")
             if match:
                 max_seq = max(max_seq, int(match.group(1)))
-        return f"{prefix}{max_seq + 1:04d}"
+        return f"{prefix}{max_seq + 1:02d}"
 
     def add_event(
         self,

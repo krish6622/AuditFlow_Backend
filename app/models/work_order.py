@@ -3,10 +3,9 @@ from __future__ import annotations
 
 import uuid
 from datetime import date, datetime
-from decimal import Decimal
 from typing import TYPE_CHECKING, List
 
-from sqlalchemy import Date, DateTime, ForeignKey, Numeric, String, Text
+from sqlalchemy import Date, DateTime, ForeignKey, String, Text
 from sqlalchemy.dialects.postgresql import UUID as PGUUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -51,11 +50,8 @@ class WorkOrder(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     # Free-text contact fields used by the Work Orders module. The normalized
     # FK columns below remain for future Customer/Employee management features.
     customer_name: Mapped[str | None] = mapped_column(String(255))
-    contact_number: Mapped[str | None] = mapped_column(String(40))
+    contact_number: Mapped[str] = mapped_column(String(40), nullable=False)
     assigned_employee_name: Mapped[str | None] = mapped_column(String(255))
-    amount: Mapped[Decimal] = mapped_column(
-        Numeric(12, 2), default=Decimal("0.00"), nullable=False
-    )
     notes: Mapped[str | None] = mapped_column(Text)
 
     customer_id: Mapped[uuid.UUID | None] = mapped_column(

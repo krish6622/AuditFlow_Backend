@@ -1,16 +1,14 @@
 """Dashboard aggregation logic — all metrics scoped to the caller's org.
 
-Revenue is the sum of ``amount`` over completed work orders (the Invoice module
-will supersede this once invoicing lands). Month-over-month deltas compare the
-current calendar month against the previous one.
+Month-over-month deltas compare the current calendar month against the previous
+one.
 """
 from __future__ import annotations
 
 import uuid
 from datetime import datetime, timezone
-from decimal import Decimal
 
-from sqlalchemy import Numeric, and_, cast, func, select
+from sqlalchemy import and_, func, select
 from sqlalchemy.orm import Session
 
 from app.core.exceptions import ValidationError
@@ -68,13 +66,6 @@ class DashboardService:
             select(func.count()).select_from(Invoice).where(Invoice.organization_id == org_id)
         ).scalar_one()
 
-        revenue = self.db.execute(
-            select(func.coalesce(func.sum(WorkOrder.amount), cast(0, Numeric(12, 2)))).where(
-                WorkOrder.organization_id == org_id,
-                WorkOrder.status == WorkOrderStatus.COMPLETED,
-            )
-        ).scalar_one()
-
         awaiting = self.db.execute(
             select(func.count())
             .select_from(WorkOrder)
@@ -88,7 +79,6 @@ class DashboardService:
             work_orders=int(work_orders),
             completed_work_orders=int(completed),
             invoices=int(invoices),
-            revenue=Decimal(revenue),
             awaiting_assignment=int(awaiting),
         )
 
@@ -109,16 +99,6 @@ class DashboardService:
                 select(func.count()).select_from(WorkOrder).where(and_(*conds))
             ).scalar_one()
 
-        def revenue_between(start, end):
-            return self.db.execute(
-                select(func.coalesce(func.sum(WorkOrder.amount), cast(0, Numeric(12, 2)))).where(
-                    WorkOrder.organization_id == org_id,
-                    WorkOrder.status == WorkOrderStatus.COMPLETED,
-                    WorkOrder.completed_at >= start,
-                    WorkOrder.completed_at < end,
-                )
-            ).scalar_one()
-
         wo_this = count_between(WorkOrder.created_at, cur_start, now)
         wo_last = count_between(WorkOrder.created_at, last_start, cur_start)
 
@@ -126,14 +106,10 @@ class DashboardService:
         comp_this = count_between(WorkOrder.completed_at, cur_start, now, comp)
         comp_last = count_between(WorkOrder.completed_at, last_start, cur_start, comp)
 
-        rev_this = float(revenue_between(cur_start, now))
-        rev_last = float(revenue_between(last_start, cur_start))
-
         return schemas.KpiDeltas(
             work_orders_pct=_pct(int(wo_this), int(wo_last)),
             completed_pct=_pct(int(comp_this), int(comp_last)),
             invoices_pct=None,  # invoicing not yet implemented
-            revenue_pct=_pct(rev_this, rev_last),
         )
 
     def _recent(self, org_id: uuid.UUID) -> list[schemas.RecentWorkOrder]:

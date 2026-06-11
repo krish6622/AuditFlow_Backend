@@ -7,10 +7,12 @@ within that organization; see ``app.core.rbac``.
 from __future__ import annotations
 
 import uuid
+from datetime import datetime
 from typing import TYPE_CHECKING, List
 
 from sqlalchemy import (
     Boolean,
+    DateTime,
     ForeignKey,
     String,
     UniqueConstraint,
@@ -52,6 +54,17 @@ class User(UUIDPrimaryKeyMixin, TimestampMixin, Base):
         nullable=False,
     )
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+
+    # ---- Soft delete (employees are never physically removed) ----
+    deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    deleted_by: Mapped[uuid.UUID | None] = mapped_column(
+        PGUUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL")
+    )
+    deleted_employee_name: Mapped[str | None] = mapped_column(String(255))
+
+    @property
+    def is_deleted(self) -> bool:
+        return self.deleted_at is not None
 
     # ---- Relationships ----
     organization: Mapped["Organization"] = relationship(back_populates="users")

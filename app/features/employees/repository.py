@@ -11,8 +11,16 @@ import uuid
 from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
 
-from app.models.enums import UserRole
+from app.models.enums import UserRole, WorkOrderStatus
 from app.models.user import User
+from app.models.work_order import WorkOrder
+
+# Statuses that make a work order "active" and block deletion of its assignee.
+_ACTIVE_WO_STATUSES = (
+    WorkOrderStatus.AWAITING_ASSIGNMENT,
+    WorkOrderStatus.ASSIGNED,
+    WorkOrderStatus.IN_PROGRESS,
+)
 
 
 class EmployeeRepository:
@@ -20,11 +28,20 @@ class EmployeeRepository:
         self.db = db
 
     def list(
-        self, *, organization_id: uuid.UUID, search: str | None = None
+        self,
+        *,
+        organization_id: uuid.UUID,
+        search: str | None = None,
+        status: str | None = None,  # "active" | "inactive"
+        include_deleted: bool = False,
     ) -> list[User]:
-        filters = [
-            User.organization_id == organization_id,
-        ]
+        filters = [User.organization_id == organization_id]
+        if not include_deleted:
+            filters.append(User.deleted_at.is_(None))
+        if status == "active":
+            filters.append(User.is_active.is_(True))
+        elif status == "inactive":
+            filters.append(User.is_active.is_(False))
         if search:
             like = f"%{search.strip()}%"
             filters.append(
@@ -40,15 +57,20 @@ class EmployeeRepository:
         ).scalars().all()
         return list(rows)
 
-    def get(self, *, organization_id: uuid.UUID, user_id: uuid.UUID) -> User | None:
-        stmt = select(User).where(
-            User.id == user_id,
-            User.organization_id == organization_id,
-        )
-        return self.db.execute(stmt).scalar_one_or_none()
+    def get(
+        self,
+        *,
+        organization_id: uuid.UUID,
+        user_id: uuid.UUID,
+        include_deleted: bool = False,
+    ) -> User | None:
+        filters = [User.id == user_id, User.organization_id == organization_id]
+        if not include_deleted:
+            filters.append(User.deleted_at.is_(None))
+        return self.db.execute(select(User).where(*filters)).scalar_one_or_none()
 
     def count_active_admins(self, *, organization_id: uuid.UUID) -> int:
-        """Number of active ADMIN users in the organization (last-admin guard)."""
+        """Number of active, non-deleted ADMIN users (last-admin guard)."""
         stmt = (
             select(func.count())
             .select_from(User)
@@ -56,9 +78,43 @@ class EmployeeRepository:
                 User.organization_id == organization_id,
                 User.role == UserRole.ADMIN,
                 User.is_active.is_(True),
+                User.deleted_at.is_(None),
             )
         )
         return self.db.execute(stmt).scalar_one()
+
+    def count_admins(self, *, organization_id: uuid.UUID) -> int:
+        """Number of non-deleted ADMIN users (delete last-admin guard)."""
+        stmt = (
+            select(func.count())
+            .select_from(User)
+            .where(
+                User.organization_id == organization_id,
+                User.role == UserRole.ADMIN,
+                User.deleted_at.is_(None),
+            )
+        )
+        return self.db.execute(stmt).scalar_one()
+
+    def has_active_work_orders(self, *, user_id: uuid.UUID) -> bool:
+        stmt = (
+            select(func.count())
+            .select_from(WorkOrder)
+            .where(
+                WorkOrder.assignee_id == user_id,
+                WorkOrder.status.in_(_ACTIVE_WO_STATUSES),
+            )
+        )
+        return self.db.execute(stmt).scalar_one() > 0
+
+    def restamp_work_order_names(self, *, user_id: uuid.UUID, label: str) -> None:
+        """Mark the (completed/closed) work orders of a deleted employee so old
+        records still read e.g. 'Hari Prasath (Deleted)'."""
+        self.db.execute(
+            WorkOrder.__table__.update()
+            .where(WorkOrder.assignee_id == user_id)
+            .values(assigned_employee_name=label)
+        )
 
     def email_taken(self, email: str, *, exclude_id: uuid.UUID | None = None) -> bool:
         stmt = select(User.id).where(func.lower(User.email) == email.lower())
