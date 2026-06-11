@@ -122,6 +122,27 @@ def employee(db_session: Session, org_admin):
 
 
 @pytest.fixture
+def employee_two(db_session: Session, org_admin):
+    """A second active EMPLOYEE in the same organization."""
+    from app.core.security import hash_password
+    from app.models.enums import UserRole
+    from app.models.user import User
+
+    emp = User(
+        organization_id=org_admin.organization_id,
+        email="employee2@acme.example.com",
+        phone="9000000009",
+        hashed_password=hash_password("Password123!"),
+        full_name="Acme Employee Two",
+        role=UserRole.EMPLOYEE,
+        is_active=True,
+    )
+    db_session.add(emp)
+    db_session.commit()
+    return emp
+
+
+@pytest.fixture
 def second_admin(db_session: Session, org_admin):
     """A second ADMIN in the same organization (so the org isn't single-admin)."""
     from app.core.security import hash_password

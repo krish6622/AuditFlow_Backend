@@ -41,7 +41,13 @@ class DashboardService:
         totals = self._totals(org_id)
         deltas = self._deltas(org_id)
         recent = self._recent(org_id)
-        return schemas.DashboardSummary(totals=totals, deltas=deltas, recent_work_orders=recent)
+        awaiting = self._by_status(org_id, WorkOrderStatus.AWAITING_ASSIGNMENT)
+        return schemas.DashboardSummary(
+            totals=totals,
+            deltas=deltas,
+            recent_work_orders=recent,
+            awaiting_assignment=awaiting,
+        )
 
     # ------------------------------------------------------------------ #
     def _totals(self, org_id: uuid.UUID) -> schemas.KpiTotals:
@@ -69,11 +75,21 @@ class DashboardService:
             )
         ).scalar_one()
 
+        awaiting = self.db.execute(
+            select(func.count())
+            .select_from(WorkOrder)
+            .where(
+                WorkOrder.organization_id == org_id,
+                WorkOrder.status == WorkOrderStatus.AWAITING_ASSIGNMENT,
+            )
+        ).scalar_one()
+
         return schemas.KpiTotals(
             work_orders=int(work_orders),
             completed_work_orders=int(completed),
             invoices=int(invoices),
             revenue=Decimal(revenue),
+            awaiting_assignment=int(awaiting),
         )
 
     def _deltas(self, org_id: uuid.UUID) -> schemas.KpiDeltas:
@@ -125,6 +141,21 @@ class DashboardService:
             self.db.execute(
                 select(WorkOrder)
                 .where(WorkOrder.organization_id == org_id)
+                .order_by(WorkOrder.created_at.desc())
+                .limit(_RECENT_LIMIT)
+            )
+            .scalars()
+            .all()
+        )
+        return [schemas.RecentWorkOrder.model_validate(r) for r in rows]
+
+    def _by_status(
+        self, org_id: uuid.UUID, status: WorkOrderStatus
+    ) -> list[schemas.RecentWorkOrder]:
+        rows = (
+            self.db.execute(
+                select(WorkOrder)
+                .where(WorkOrder.organization_id == org_id, WorkOrder.status == status)
                 .order_by(WorkOrder.created_at.desc())
                 .limit(_RECENT_LIMIT)
             )

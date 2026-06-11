@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import re
 import uuid
+from datetime import datetime, timezone
 
 from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
@@ -35,10 +36,13 @@ class WorkOrderRepository:
         limit: int,
         offset: int,
         assignee_id: uuid.UUID | None = None,
+        requested_by_id: uuid.UUID | None = None,
     ) -> tuple[list[WorkOrder], int]:
         filters = [WorkOrder.organization_id == organization_id]
         if assignee_id is not None:
             filters.append(WorkOrder.assignee_id == assignee_id)
+        if requested_by_id is not None:
+            filters.append(WorkOrder.requested_by_id == requested_by_id)
         if status is not None:
             filters.append(WorkOrder.status == status)
         if search:
@@ -70,20 +74,23 @@ class WorkOrderRepository:
         return list(rows), int(total)
 
     def next_number(self, *, organization_id: uuid.UUID) -> str:
-        """Generate the next per-org work-order number, e.g. ``WO-0007``."""
-        latest = self.db.execute(
-            select(WorkOrder.number)
-            .where(WorkOrder.organization_id == organization_id)
-            .order_by(WorkOrder.created_at.desc())
-            .limit(50)
+        """Generate the next per-org, per-year work-order number, e.g.
+        ``WO-2026-0001``. The sequence resets each calendar year."""
+        year = datetime.now(timezone.utc).year
+        prefix = f"WO-{year}-"
+        numbers = self.db.execute(
+            select(WorkOrder.number).where(
+                WorkOrder.organization_id == organization_id,
+                WorkOrder.number.like(f"{prefix}%"),
+            )
         ).scalars().all()
 
         max_seq = 0
-        for number in latest:
+        for number in numbers:
             match = re.search(r"(\d+)$", number or "")
             if match:
                 max_seq = max(max_seq, int(match.group(1)))
-        return f"WO-{max_seq + 1:04d}"
+        return f"{prefix}{max_seq + 1:04d}"
 
     def add_event(
         self,

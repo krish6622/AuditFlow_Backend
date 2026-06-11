@@ -31,7 +31,8 @@ CUSTOMER_MANAGE = "customer:manage"
 CUSTOMER_VIEW = "customer:view"
 
 # ---- Work orders ----
-WORKORDER_MANAGE = "workorder:manage"        # create/assign/cancel
+WORKORDER_MANAGE = "workorder:manage"        # assign/edit/close/cancel/delete
+WORKORDER_CREATE_REQUEST = "workorder:create_request"  # raise a new work request
 WORKORDER_VIEW_ALL = "workorder:view_all"    # see every order in the org
 WORKORDER_VIEW_ASSIGNED = "workorder:view_assigned"  # see only own assignments
 WORKORDER_UPDATE_STATUS = "workorder:update_status"  # progress/notes/photos/complete
@@ -56,15 +57,17 @@ _ROLE_PERMISSIONS: dict[UserRole, frozenset[str]] = {
             CUSTOMER_MANAGE,
             CUSTOMER_VIEW,
             WORKORDER_MANAGE,
+            WORKORDER_CREATE_REQUEST,
             WORKORDER_VIEW_ALL,
             INVOICE_MANAGE,
             INVOICE_VIEW,
             REPORT_VIEW,
         }
     ),
-    # EMPLOYEE is scoped to their own assigned work.
+    # EMPLOYEE can raise requests and progress their own assigned work.
     UserRole.EMPLOYEE: frozenset(
         {
+            WORKORDER_CREATE_REQUEST,
             WORKORDER_VIEW_ASSIGNED,
             WORKORDER_UPDATE_STATUS,
         }

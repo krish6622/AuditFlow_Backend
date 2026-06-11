@@ -15,6 +15,7 @@ class KpiTotals(BaseModel):
     completed_work_orders: int
     invoices: int
     revenue: Decimal
+    awaiting_assignment: int
 
 
 class KpiDeltas(BaseModel):
@@ -42,3 +43,4 @@ class DashboardSummary(BaseModel):
     totals: KpiTotals
     deltas: KpiDeltas
     recent_work_orders: list[RecentWorkOrder]
+    awaiting_assignment: list[RecentWorkOrder]

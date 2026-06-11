@@ -51,6 +51,15 @@ class AuditAction(str, enum.Enum):
     STATUS_DEACTIVATED = "status_deactivated"
 
 
+class NotificationType(str, enum.Enum):
+    """In-app notification categories tied to the work-order workflow."""
+
+    WORKORDER_REQUESTED = "workorder_requested"   # new request → admins
+    WORKORDER_ASSIGNED = "workorder_assigned"     # assigned → employee
+    WORKORDER_COMPLETED = "workorder_completed"   # completed → admins
+    WORKORDER_CLOSED = "workorder_closed"         # closed → requester
+
+
 class SubscriptionStatus(str, enum.Enum):
     TRIAL = "trial"
     ACTIVE = "active"
@@ -59,16 +68,23 @@ class SubscriptionStatus(str, enum.Enum):
 
 
 class WorkOrderStatus(str, enum.Enum):
-    PENDING = "pending"
+    """Lifecycle of an auditor-office work order.
+
+    Flow: AWAITING_ASSIGNMENT (employee request) → ASSIGNED (admin assigns an
+    employee + due date) → IN_PROGRESS → COMPLETED (employee) → CLOSED (admin
+    reviews/invoices). CANCELLED is an admin escape hatch from any open state.
+    """
+
+    AWAITING_ASSIGNMENT = "awaiting_assignment"
     ASSIGNED = "assigned"
     IN_PROGRESS = "in_progress"
     COMPLETED = "completed"
+    CLOSED = "closed"
     CANCELLED = "cancelled"
 
 
-# Statuses surfaced in the Work Orders module UI (Pending / In Progress / Completed).
+# Progress statuses an assigned employee can move an order through.
 WORK_ORDER_USER_STATUSES = (
-    WorkOrderStatus.PENDING,
     WorkOrderStatus.IN_PROGRESS,
     WorkOrderStatus.COMPLETED,
 )
@@ -78,6 +94,21 @@ class WorkOrderPriority(str, enum.Enum):
     LOW = "low"
     MEDIUM = "medium"
     HIGH = "high"
+
+
+class WorkOrderCategory(str, enum.Enum):
+    """Service categories for an auditor office. ``OTHERS`` pairs with a
+    free-text ``category_other`` on the work order."""
+
+    INCOME_TAX = "income_tax"
+    GST = "gst"
+    PROJECT_REPORT = "project_report"
+    AUDIT = "audit"
+    ROC = "roc"
+    FINANCIAL_STATEMENT = "financial_statement"
+    TDS = "tds"
+    ACCOUNTING = "accounting"
+    OTHERS = "others"
 
 
 class InvoiceStatus(str, enum.Enum):
