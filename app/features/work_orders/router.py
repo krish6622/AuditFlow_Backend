@@ -35,10 +35,15 @@ def get_service(db: Session = Depends(get_db)) -> WorkOrderService:
 )
 def create_work_order(
     data: schemas.WorkOrderCreate,
-    current_user: User = Depends(require_permissions(rbac.WORKORDER_MANAGE)),
+    current_user: User = Depends(require_permissions(rbac.WORKORDER_CREATE_REQUEST)),
     service: WorkOrderService = Depends(get_service),
 ) -> schemas.WorkOrderRead:
-    """Create a work order for the caller's organization."""
+    """Create a work order.
+
+    Admins may assign on create (→ ASSIGNED); employees raise a request that the
+    service forces to AWAITING_ASSIGNMENT (no assignee/due date/status), stamped
+    with ``requested_by``.
+    """
     return schemas.WorkOrderRead.model_validate(service.create(current_user, data))
 
 
@@ -75,6 +80,20 @@ def list_my_work_orders(
     )
 
 
+@router.get("/my-requests", response_model=schemas.WorkOrderListResponse)
+def list_my_requests(
+    current_user: User = Depends(require_permissions(rbac.WORKORDER_CREATE_REQUEST)),
+    service: WorkOrderService = Depends(get_service),
+    status_filter: WorkOrderStatus | None = Query(default=None, alias="status"),
+    page: int = Query(default=1, ge=1),
+    page_size: int = Query(default=50, ge=1, le=100),
+) -> schemas.WorkOrderListResponse:
+    """Work orders the authenticated user raised (their submitted requests)."""
+    return service.list_requested(
+        current_user, status=status_filter, page=page, page_size=page_size
+    )
+
+
 @router.patch("/{work_order_id}/status", response_model=schemas.WorkOrderRead)
 def update_work_order_status(
     work_order_id: uuid.UUID,
@@ -82,10 +101,43 @@ def update_work_order_status(
     current_user: User = Depends(get_current_active_user),
     service: WorkOrderService = Depends(get_service),
 ) -> schemas.WorkOrderRead:
-    """Update status and add a completion/progress note (assignee or admin)."""
+    """Progress an order (assignee or admin): ASSIGNED→IN_PROGRESS→COMPLETED."""
     return schemas.WorkOrderRead.model_validate(
         service.update_status(current_user, work_order_id, data)
     )
+
+
+@router.patch("/{work_order_id}/assign", response_model=schemas.WorkOrderRead)
+def assign_work_order(
+    work_order_id: uuid.UUID,
+    data: schemas.WorkOrderAssign,
+    current_user: User = Depends(require_permissions(rbac.WORKORDER_MANAGE)),
+    service: WorkOrderService = Depends(get_service),
+) -> schemas.WorkOrderRead:
+    """Admin assigns an employee (+ optional due date) → ASSIGNED."""
+    return schemas.WorkOrderRead.model_validate(
+        service.assign(current_user, work_order_id, data)
+    )
+
+
+@router.patch("/{work_order_id}/close", response_model=schemas.WorkOrderRead)
+def close_work_order(
+    work_order_id: uuid.UUID,
+    current_user: User = Depends(require_permissions(rbac.WORKORDER_MANAGE)),
+    service: WorkOrderService = Depends(get_service),
+) -> schemas.WorkOrderRead:
+    """Admin review: COMPLETED → CLOSED."""
+    return schemas.WorkOrderRead.model_validate(service.close(current_user, work_order_id))
+
+
+@router.patch("/{work_order_id}/cancel", response_model=schemas.WorkOrderRead)
+def cancel_work_order(
+    work_order_id: uuid.UUID,
+    current_user: User = Depends(require_permissions(rbac.WORKORDER_MANAGE)),
+    service: WorkOrderService = Depends(get_service),
+) -> schemas.WorkOrderRead:
+    """Admin cancels an open order."""
+    return schemas.WorkOrderRead.model_validate(service.cancel(current_user, work_order_id))
 
 
 @router.get("/{work_order_id}", response_model=schemas.WorkOrderRead)

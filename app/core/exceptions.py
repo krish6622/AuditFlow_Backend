@@ -11,6 +11,7 @@ from __future__ import annotations
 from typing import Any, Optional
 
 from fastapi import Request, status
+from fastapi.encoders import jsonable_encoder
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from starlette.exceptions import HTTPException as StarletteHTTPException
@@ -84,12 +85,20 @@ def register_exception_handlers(app) -> None:
 
     @app.exception_handler(RequestValidationError)
     async def _handle_validation(_: Request, exc: RequestValidationError) -> JSONResponse:
+        raw = exc.errors()
+        # Drop pydantic's ``ctx`` — for custom validators it holds the raw
+        # ValueError, which isn't JSON-serializable. jsonable_encoder makes the
+        # rest (tuples, Decimals, …) safe.
+        errors = [{k: v for k, v in err.items() if k != "ctx"} for err in raw]
+        # Surface the first concrete message so the UI can show something useful.
+        first = (raw[0].get("msg") if raw else "") or "Request validation failed"
+        message = first.removeprefix("Value error, ")
         return JSONResponse(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             content=_envelope(
                 "validation_error",
-                "Request validation failed",
-                {"errors": exc.errors()},
+                message,
+                {"errors": jsonable_encoder(errors)},
             ),
         )
 

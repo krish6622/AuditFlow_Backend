@@ -11,7 +11,12 @@ from sqlalchemy.dialects.postgresql import UUID as PGUUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base, TimestampMixin, UUIDPrimaryKeyMixin
-from app.models.enums import WorkOrderPriority, WorkOrderStatus, pg_enum
+from app.models.enums import (
+    WorkOrderCategory,
+    WorkOrderPriority,
+    WorkOrderStatus,
+    pg_enum,
+)
 
 if TYPE_CHECKING:
     from app.models.customer import Customer
@@ -33,9 +38,20 @@ class WorkOrder(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     title: Mapped[str | None] = mapped_column(String(255))
     description: Mapped[str | None] = mapped_column(Text)  # "Work Description"
 
+    # Service category (auditor office). ``category_other`` holds the free-text
+    # description when category is OTHERS. Nullable so legacy rows remain valid.
+    category: Mapped[WorkOrderCategory | None] = mapped_column(
+        pg_enum(WorkOrderCategory, "work_order_category")
+    )
+    category_other: Mapped[str | None] = mapped_column(String(120))
+
+    # The date the order was raised (paper-form "Date"); defaults to today.
+    order_date: Mapped[date | None] = mapped_column(Date)
+
     # Free-text contact fields used by the Work Orders module. The normalized
     # FK columns below remain for future Customer/Employee management features.
     customer_name: Mapped[str | None] = mapped_column(String(255))
+    contact_number: Mapped[str | None] = mapped_column(String(40))
     assigned_employee_name: Mapped[str | None] = mapped_column(String(255))
     amount: Mapped[Decimal] = mapped_column(
         Numeric(12, 2), default=Decimal("0.00"), nullable=False
@@ -52,10 +68,17 @@ class WorkOrder(UUIDPrimaryKeyMixin, TimestampMixin, Base):
         ForeignKey("users.id", ondelete="SET NULL"),
         index=True,
     )
+    # The employee who raised the request (auditor-office workflow). NULL for
+    # legacy/admin-created orders.
+    requested_by_id: Mapped[uuid.UUID | None] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="SET NULL"),
+        index=True,
+    )
 
     status: Mapped[WorkOrderStatus] = mapped_column(
         pg_enum(WorkOrderStatus, "work_order_status"),
-        default=WorkOrderStatus.PENDING,
+        default=WorkOrderStatus.AWAITING_ASSIGNMENT,
         nullable=False,
     )
     priority: Mapped[WorkOrderPriority] = mapped_column(
@@ -71,6 +94,7 @@ class WorkOrder(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     assignee: Mapped["User | None"] = relationship(
         back_populates="assigned_work_orders", foreign_keys=[assignee_id]
     )
+    requested_by: Mapped["User | None"] = relationship(foreign_keys=[requested_by_id])
     note_entries: Mapped[List["WorkOrderNote"]] = relationship(
         back_populates="work_order", cascade="all, delete-orphan"
     )
