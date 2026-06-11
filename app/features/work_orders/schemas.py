@@ -3,7 +3,6 @@ from __future__ import annotations
 
 import uuid
 from datetime import date, datetime
-from decimal import Decimal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
@@ -37,14 +36,13 @@ class WorkOrderCreate(BaseModel):
     category: WorkOrderCategory
     category_other: str | None = Field(default=None, max_length=120)
     customer_name: str = Field(min_length=1, max_length=255)
-    contact_number: str | None = Field(default=None, max_length=40)
+    contact_number: str = Field(min_length=1, max_length=40, description="Required")
     description: str = Field(min_length=1, description="Work description")
     assignee_id: uuid.UUID | None = None  # employee to assign
     assigned_employee_name: str | None = Field(default=None, max_length=255)
     urgency: WorkOrderPriority = WorkOrderPriority.MEDIUM
     order_date: date | None = None  # defaults to today server-side
-    due_date: date | None = None
-    amount: Decimal | None = Field(default=None, ge=0, max_digits=12, decimal_places=2)
+    due_date: date | None = None  # optional
     notes: str | None = None
     # New orders default to AWAITING_ASSIGNMENT; the service governs what each
     # role may actually set (employees never choose status).
@@ -68,7 +66,6 @@ class WorkOrderUpdate(BaseModel):
     assigned_employee_name: str | None = Field(default=None, max_length=255)
     urgency: WorkOrderPriority | None = None
     order_date: date | None = None
-    amount: Decimal | None = Field(default=None, ge=0, max_digits=12, decimal_places=2)
     due_date: date | None = None
     notes: str | None = None
     # Transition rules are enforced in the service (see Phase 3); any valid
@@ -107,7 +104,6 @@ class WorkOrderRead(BaseModel):
     description: str | None
     urgency: WorkOrderPriority = Field(validation_alias="priority")
     order_date: date | None
-    amount: Decimal
     due_date: date | None
     notes: str | None
     status: WorkOrderStatus

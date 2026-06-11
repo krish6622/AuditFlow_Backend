@@ -21,6 +21,7 @@ def _create_request(client, emp_token) -> dict:
         json={
             "category": "gst",
             "customer_name": "Notify Co",
+            "contact_number": "9876500000",
             "description": "GST filing for Q2",
             "urgency": "high",
         },

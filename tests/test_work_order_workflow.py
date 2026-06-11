@@ -7,6 +7,8 @@ Requires a PostgreSQL ``TEST_DATABASE_URL`` (see conftest); skipped otherwise.
 """
 from __future__ import annotations
 
+import re
+
 
 def _login(client, email: str, password: str = "Password123!") -> str:
     resp = client.post("/api/v1/auth/login", json={"identifier": email, "password": password})
@@ -22,6 +24,7 @@ def _request(client, token, **overrides) -> dict:
     body = {
         "category": "gst",
         "customer_name": "Workflow Co",
+        "contact_number": "9876500000",
         "description": "GST filing",
         "urgency": "high",
         **overrides,
@@ -195,3 +198,46 @@ def test_dashboard_reports_awaiting_assignment(client, org_admin, employee) -> N
     summary = client.get("/api/v1/dashboard/summary", headers=_auth(admin)).json()
     assert summary["totals"]["awaiting_assignment"] >= 1
     assert any(w["status"] == "awaiting_assignment" for w in summary["awaiting_assignment"])
+
+
+# --------------------------------------------------------------------------- #
+# Number format / contact / due date / amount removal / dashboard shape
+# --------------------------------------------------------------------------- #
+def test_work_order_number_format_and_daily_sequence(client, org_admin, employee) -> None:
+    emp = _login(client, EMP)
+    a = _request(client, emp)
+    b = _request(client, emp)
+    # WO-YYYYMMDD-XX
+    assert re.match(r"^WO-\d{8}-\d{2,}$", a["number"]), a["number"]
+    pa, sa = a["number"].rsplit("-", 1)
+    pb, sb = b["number"].rsplit("-", 1)
+    assert pa == pb  # same day → same prefix
+    assert int(sb) == int(sa) + 1  # sequence increments
+
+
+def test_contact_number_is_required(client, org_admin) -> None:
+    admin = _login(client, ADMIN)
+    r = client.post(
+        "/api/v1/work-orders",
+        json={"category": "gst", "customer_name": "X", "description": "d", "urgency": "low"},
+        headers=_auth(admin),
+    )
+    assert r.status_code == 422
+
+
+def test_due_date_is_optional(client, org_admin, employee) -> None:
+    wo = _request(client, _login(client, EMP))  # no due_date supplied
+    assert wo["due_date"] is None
+
+
+def test_expected_amount_is_gone(client, org_admin, employee) -> None:
+    wo = _request(client, _login(client, EMP), amount="500.00")  # amount ignored
+    assert "amount" not in wo
+
+
+def test_dashboard_has_three_kpis_and_no_revenue(client, org_admin) -> None:
+    admin = _login(client, ADMIN)
+    summary = client.get("/api/v1/dashboard/summary", headers=_auth(admin)).json()
+    assert "revenue" not in summary["totals"]
+    assert "revenue_pct" not in summary["deltas"]
+    assert {"work_orders", "completed_work_orders", "invoices"} <= summary["totals"].keys()

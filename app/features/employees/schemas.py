@@ -50,3 +50,4 @@ class EmployeeRead(BaseModel):
     role: UserRole
     is_active: bool
     created_at: datetime
+    deleted_at: datetime | None = None

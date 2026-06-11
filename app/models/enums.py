@@ -49,6 +49,7 @@ class AuditAction(str, enum.Enum):
     ROLE_DEMOTED = "role_demoted"          # ADMIN -> EMPLOYEE
     STATUS_ACTIVATED = "status_activated"
     STATUS_DEACTIVATED = "status_deactivated"
+    USER_DELETED = "user_deleted"          # soft delete
 
 
 class NotificationType(str, enum.Enum):

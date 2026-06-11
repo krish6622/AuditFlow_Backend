@@ -8,6 +8,7 @@ sign in.
 from __future__ import annotations
 
 import uuid
+from datetime import datetime, timezone
 
 from sqlalchemy.orm import Session
 
@@ -24,6 +25,11 @@ logger = get_logger(__name__)
 
 # Surfaced to the client (and the UI) when a guard blocks removing the last admin.
 LAST_ADMIN_MESSAGE = "At least one Admin must exist in the organization."
+LAST_ADMIN_DELETE_MESSAGE = "At least one Admin must remain in the organization."
+ACTIVE_WORK_ORDERS_MESSAGE = (
+    "This employee has active work orders. Reassign or complete them before deletion."
+)
+SELF_DELETE_MESSAGE = "You cannot delete your own account."
 
 
 class EmployeeService:
@@ -38,8 +44,20 @@ class EmployeeService:
             raise ValidationError("This account is not associated with an organization")
         return admin.organization_id
 
-    def list(self, admin: User, *, search: str | None = None) -> list[User]:
-        return self.repo.list(organization_id=self._org(admin), search=search)
+    def list(
+        self,
+        admin: User,
+        *,
+        search: str | None = None,
+        status: str | None = None,
+        include_deleted: bool = False,
+    ) -> list[User]:
+        return self.repo.list(
+            organization_id=self._org(admin),
+            search=search,
+            status=status,
+            include_deleted=include_deleted,
+        )
 
     def get(self, admin: User, employee_id: uuid.UUID) -> User:
         emp = self.repo.get(organization_id=self._org(admin), user_id=employee_id)
@@ -128,6 +146,49 @@ class EmployeeService:
         self.db.commit()
         self.db.refresh(member)
         logger.info("User %s active=%s (by %s)", member.id, is_active, admin.id)
+        return member
+
+    def activate(self, admin: User, employee_id: uuid.UUID) -> User:
+        return self.set_active(admin, employee_id, True)
+
+    def deactivate(self, admin: User, employee_id: uuid.UUID) -> User:
+        return self.set_active(admin, employee_id, False)
+
+    def delete(self, admin: User, employee_id: uuid.UUID) -> User:
+        """Soft-delete an employee. Enforces: no self-delete, never the last
+        admin, and not while they hold active work orders. Preserves history."""
+        org_id = self._org(admin)
+        member = self.get(admin, employee_id)  # 404 if missing or already deleted
+
+        # Rule 1 — at least one admin must remain (covers deleting the sole admin).
+        if member.role == UserRole.ADMIN and self.repo.count_admins(organization_id=org_id) <= 1:
+            raise ConflictError(LAST_ADMIN_DELETE_MESSAGE)
+
+        # Rule 4 — cannot delete your own account.
+        if employee_id == admin.id:
+            raise ValidationError(SELF_DELETE_MESSAGE)
+
+        # Rule 2 — block while active work orders are assigned.
+        if self.repo.has_active_work_orders(user_id=member.id):
+            raise ConflictError(ACTIVE_WORK_ORDERS_MESSAGE)
+
+        # Rule 3 — allowed; soft-delete and preserve history.
+        deleted_label = f"{member.full_name} (Deleted)"
+        member.deleted_at = datetime.now(timezone.utc)
+        member.deleted_by = admin.id
+        member.deleted_employee_name = deleted_label
+        member.is_active = False
+        self.repo.restamp_work_order_names(user_id=member.id, label=deleted_label)
+
+        self.audit.record(
+            organization_id=org_id,
+            performed_by_user_id=admin.id,
+            affected_user_id=member.id,
+            action=AuditAction.USER_DELETED,
+        )
+        self.db.commit()
+        self.db.refresh(member)
+        logger.info("User %s soft-deleted (by %s)", member.id, admin.id)
         return member
 
     def set_role(
