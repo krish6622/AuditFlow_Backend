@@ -58,12 +58,8 @@ def get_current_active_user(
 ) -> User:
     if not current_user.is_active:
         raise AuthenticationError("User account is deactivated")
-    # A deactivated organization locks out all its members (super admins exempt).
-    if (
-        current_user.role != UserRole.SUPER_ADMIN
-        and current_user.organization is not None
-        and not current_user.organization.is_active
-    ):
+    # A deactivated organization locks out all its members.
+    if current_user.organization is not None and not current_user.organization.is_active:
         raise AuthenticationError("Organization is deactivated")
     return current_user
 
@@ -97,18 +93,18 @@ def require_permissions(*permissions: str):
 class CurrentTenant:
     """Resolved tenant context for the request.
 
-    For super admins ``organization_id`` is ``None``; tenant-scoped features
-    must reject super admins (or operate platform-wide) explicitly.
+    Every user belongs to an organization, so ``organization_id`` is always set
+    and feature code can safely scope queries by it.
     """
 
     def __init__(self, user: User) -> None:
         self.user = user
-        self.organization_id: uuid.UUID | None = user.organization_id
+        self.organization_id: uuid.UUID = user.organization_id
         self.role: UserRole = user.role
 
     @property
-    def is_super_admin(self) -> bool:
-        return self.role == UserRole.SUPER_ADMIN
+    def is_admin(self) -> bool:
+        return self.role == UserRole.ADMIN
 
 
 def get_current_tenant(

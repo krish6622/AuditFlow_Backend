@@ -59,7 +59,8 @@ Copy-Item .env.example .env        # then set JWT_SECRET_KEY + DATABASE_URL
 python -c "import secrets; print(secrets.token_urlsafe(64))"   # -> JWT_SECRET_KEY
 
 alembic upgrade head               # create the schema
-python -m app.cli seed-superadmin  # create the super admin from .env
+python -m app.cli seed-admin       # create the bootstrap org + first ADMIN from .env
+python -m app.cli seed-demo        # (optional) + sample employees & audit activity
 uvicorn app.main:app --reload --port 8000
 ```
 
@@ -70,7 +71,7 @@ Open **http://localhost:8000/docs** for interactive Swagger UI.
 ```bash
 cp .env.example .env     # set JWT_SECRET_KEY
 docker compose up --build
-docker compose exec api python -m app.cli seed-superadmin
+docker compose exec api python -m app.cli seed-admin
 ```
 
 ## Configuration

@@ -6,11 +6,11 @@ from __future__ import annotations
 
 
 def _login(client, email: str, password: str):
-    return client.post("/api/v1/auth/login", json={"email": email, "password": password})
+    return client.post("/api/v1/auth/login", json={"identifier": email, "password": password})
 
 
 def test_login_success(client, org_admin) -> None:
-    resp = _login(client, "admin@acme.test", "Password123!")
+    resp = _login(client, "admin@acme.example.com", "Password123!")
     assert resp.status_code == 200
     body = resp.json()
     assert body["token_type"] == "bearer"
@@ -20,13 +20,13 @@ def test_login_success(client, org_admin) -> None:
 
 
 def test_login_wrong_password(client, org_admin) -> None:
-    resp = _login(client, "admin@acme.test", "wrong")
+    resp = _login(client, "admin@acme.example.com", "wrong")
     assert resp.status_code == 401
     assert resp.json()["error"]["code"] == "authentication_error"
 
 
 def test_login_unknown_email(client, org_admin) -> None:
-    resp = _login(client, "nobody@acme.test", "whatever")
+    resp = _login(client, "nobody@acme.example.com", "whatever")
     assert resp.status_code == 401
 
 
@@ -35,17 +35,17 @@ def test_me_requires_auth(client, org_admin) -> None:
 
 
 def test_me_returns_profile(client, org_admin) -> None:
-    token = _login(client, "admin@acme.test", "Password123!").json()["access_token"]
+    token = _login(client, "admin@acme.example.com", "Password123!").json()["access_token"]
     resp = client.get("/api/v1/auth/me", headers={"Authorization": f"Bearer {token}"})
     assert resp.status_code == 200
     body = resp.json()
-    assert body["email"] == "admin@acme.test"
-    assert body["role"] == "org_admin"
+    assert body["email"] == "admin@acme.example.com"
+    assert body["role"] == "admin"
     assert body["organization_id"] is not None
 
 
 def test_refresh_rotates_token(client, org_admin) -> None:
-    tokens = _login(client, "admin@acme.test", "Password123!").json()
+    tokens = _login(client, "admin@acme.example.com", "Password123!").json()
     resp = client.post(
         "/api/v1/auth/refresh", json={"refresh_token": tokens["refresh_token"]}
     )
@@ -61,7 +61,7 @@ def test_refresh_rotates_token(client, org_admin) -> None:
 
 
 def test_logout_revokes_refresh_token(client, org_admin) -> None:
-    tokens = _login(client, "admin@acme.test", "Password123!").json()
+    tokens = _login(client, "admin@acme.example.com", "Password123!").json()
     assert client.post(
         "/api/v1/auth/logout", json={"refresh_token": tokens["refresh_token"]}
     ).status_code == 200
@@ -72,7 +72,7 @@ def test_logout_revokes_refresh_token(client, org_admin) -> None:
 
 
 def test_change_password_flow(client, org_admin) -> None:
-    token = _login(client, "admin@acme.test", "Password123!").json()["access_token"]
+    token = _login(client, "admin@acme.example.com", "Password123!").json()["access_token"]
     resp = client.post(
         "/api/v1/auth/change-password",
         headers={"Authorization": f"Bearer {token}"},
@@ -80,13 +80,13 @@ def test_change_password_flow(client, org_admin) -> None:
     )
     assert resp.status_code == 200
     # Old password no longer works; new one does.
-    assert _login(client, "admin@acme.test", "Password123!").status_code == 401
-    assert _login(client, "admin@acme.test", "NewPassw0rd!").status_code == 200
+    assert _login(client, "admin@acme.example.com", "Password123!").status_code == 401
+    assert _login(client, "admin@acme.example.com", "NewPassw0rd!").status_code == 200
 
 
 def test_forgot_then_reset_password(client, org_admin) -> None:
     forgot = client.post(
-        "/api/v1/auth/forgot-password", json={"email": "admin@acme.test"}
+        "/api/v1/auth/forgot-password", json={"email": "admin@acme.example.com"}
     )
     assert forgot.status_code == 200
     reset_token = forgot.json()["reset_token"]  # exposed in non-production
@@ -97,12 +97,12 @@ def test_forgot_then_reset_password(client, org_admin) -> None:
         json={"token": reset_token, "new_password": "Reset3dPass!"},
     )
     assert reset.status_code == 200
-    assert _login(client, "admin@acme.test", "Reset3dPass!").status_code == 200
+    assert _login(client, "admin@acme.example.com", "Reset3dPass!").status_code == 200
 
 
 def test_forgot_password_unknown_email_is_uniform(client, org_admin) -> None:
     resp = client.post(
-        "/api/v1/auth/forgot-password", json={"email": "ghost@acme.test"}
+        "/api/v1/auth/forgot-password", json={"email": "ghost@acme.example.com"}
     )
     # Same 200 + message regardless of account existence (no enumeration).
     assert resp.status_code == 200
