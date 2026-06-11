@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 import uuid
-from datetime import date
+from datetime import date, datetime
 
 from pydantic import BaseModel, ConfigDict
 
@@ -14,6 +14,20 @@ class KpiTotals(BaseModel):
     completed_work_orders: int
     invoices: int
     awaiting_assignment: int
+    pending_approvals: int
+
+
+class PendingEmployee(BaseModel):
+    """A self-registered user awaiting administrator approval."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    full_name: str
+    email: str | None
+    phone: str | None
+    designation: str | None
+    created_at: datetime
 
 
 class KpiDeltas(BaseModel):
@@ -40,3 +54,4 @@ class DashboardSummary(BaseModel):
     deltas: KpiDeltas
     recent_work_orders: list[RecentWorkOrder]
     awaiting_assignment: list[RecentWorkOrder]
+    pending_approvals: list[PendingEmployee]

@@ -39,6 +39,20 @@ class UserRole(str, enum.Enum):
     EMPLOYEE = "employee"    # field worker within an organization
 
 
+class UserStatus(str, enum.Enum):
+    """Account lifecycle state, independent of role.
+
+    Self-registered users start ``PENDING_APPROVAL`` and cannot sign in until an
+    admin approves them (-> ``ACTIVE``) or rejects them (-> ``INACTIVE``). Admins
+    can later deactivate (``ACTIVE`` -> ``INACTIVE``) or reactivate. ``is_active``
+    on the user row is kept in lockstep (only ``ACTIVE`` is sign-in-able).
+    """
+
+    PENDING_APPROVAL = "pending_approval"
+    ACTIVE = "active"
+    INACTIVE = "inactive"
+
+
 class AuditAction(str, enum.Enum):
     """Security-sensitive actions recorded in ``audit_logs``.
 
@@ -49,6 +63,8 @@ class AuditAction(str, enum.Enum):
     ROLE_DEMOTED = "role_demoted"          # ADMIN -> EMPLOYEE
     STATUS_ACTIVATED = "status_activated"
     STATUS_DEACTIVATED = "status_deactivated"
+    USER_APPROVED = "user_approved"        # PENDING_APPROVAL -> ACTIVE
+    USER_REJECTED = "user_rejected"        # PENDING_APPROVAL -> INACTIVE
     USER_DELETED = "user_deleted"          # soft delete
 
 

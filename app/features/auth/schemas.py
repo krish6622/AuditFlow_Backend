@@ -6,7 +6,7 @@ from datetime import datetime
 
 from pydantic import BaseModel, ConfigDict, EmailStr, Field
 
-from app.models.enums import UserRole
+from app.models.enums import UserRole, UserStatus
 
 
 # --------------------------------------------------------------------------- #
@@ -20,17 +20,16 @@ class LoginRequest(BaseModel):
 
 
 class RegisterRequest(BaseModel):
-    """Public self-serve sign-up.
+    """Public self-serve sign-up for this internal, single-tenant app.
 
-    Only email + password are required; a new organization is created for the
-    signer, who becomes its Organization Admin. ``full_name`` and
-    ``organization_name`` are optional and sensibly defaulted from the email.
+    Only email + password are required. The new user joins the organization as
+    an EMPLOYEE awaiting administrator approval — no organization is created and
+    no admin access is granted. ``full_name`` is optional (defaulted from email).
     """
 
     email: EmailStr
     password: str = Field(min_length=8, max_length=128)
     full_name: str | None = Field(default=None, max_length=255)
-    organization_name: str | None = Field(default=None, max_length=255)
 
 
 class RefreshRequest(BaseModel):
@@ -74,6 +73,7 @@ class UserProfile(BaseModel):
     phone: str | None
     designation: str | None
     role: UserRole
+    status: UserStatus
     organization_id: uuid.UUID | None
     is_active: bool
     created_at: datetime
@@ -81,6 +81,14 @@ class UserProfile(BaseModel):
 
 class MessageResponse(BaseModel):
     message: str
+
+
+class RegisterResponse(BaseModel):
+    """Sign-up result. No tokens are issued — the account must be approved by an
+    administrator before it can sign in."""
+
+    message: str
+    status: str
 
 
 class ForgotPasswordResponse(BaseModel):

@@ -11,9 +11,17 @@ import uuid
 from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
 
-from app.models.enums import UserRole, WorkOrderStatus
+from app.models.enums import UserRole, UserStatus, WorkOrderStatus
 from app.models.user import User
 from app.models.work_order import WorkOrder
+
+# Employee-list ``status`` query values mapped to the lifecycle enum.
+_STATUS_FILTERS = {
+    "active": UserStatus.ACTIVE,
+    "inactive": UserStatus.INACTIVE,
+    "pending": UserStatus.PENDING_APPROVAL,
+    "pending_approval": UserStatus.PENDING_APPROVAL,
+}
 
 # Statuses that make a work order "active" and block deletion of its assignee.
 _ACTIVE_WO_STATUSES = (
@@ -32,16 +40,15 @@ class EmployeeRepository:
         *,
         organization_id: uuid.UUID,
         search: str | None = None,
-        status: str | None = None,  # "active" | "inactive"
+        status: str | None = None,  # "active" | "inactive" | "pending"
         include_deleted: bool = False,
     ) -> list[User]:
         filters = [User.organization_id == organization_id]
         if not include_deleted:
             filters.append(User.deleted_at.is_(None))
-        if status == "active":
-            filters.append(User.is_active.is_(True))
-        elif status == "inactive":
-            filters.append(User.is_active.is_(False))
+        mapped_status = _STATUS_FILTERS.get(status) if status else None
+        if mapped_status is not None:
+            filters.append(User.status == mapped_status)
         if search:
             like = f"%{search.strip()}%"
             filters.append(
@@ -91,6 +98,19 @@ class EmployeeRepository:
             .where(
                 User.organization_id == organization_id,
                 User.role == UserRole.ADMIN,
+                User.deleted_at.is_(None),
+            )
+        )
+        return self.db.execute(stmt).scalar_one()
+
+    def count_pending(self, *, organization_id: uuid.UUID) -> int:
+        """Number of non-deleted users awaiting approval."""
+        stmt = (
+            select(func.count())
+            .select_from(User)
+            .where(
+                User.organization_id == organization_id,
+                User.status == UserStatus.PENDING_APPROVAL,
                 User.deleted_at.is_(None),
             )
         )

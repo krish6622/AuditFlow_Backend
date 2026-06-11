@@ -13,12 +13,13 @@ from sqlalchemy.orm import Session
 
 from app.core.exceptions import ValidationError
 from app.features.dashboard import schemas
-from app.models.enums import WorkOrderStatus
+from app.models.enums import UserStatus, WorkOrderStatus
 from app.models.invoice import Invoice
 from app.models.user import User
 from app.models.work_order import WorkOrder
 
 _RECENT_LIMIT = 5
+_PENDING_LIMIT = 8
 
 
 def _pct(this: float, last: float) -> float | None:
@@ -40,11 +41,13 @@ class DashboardService:
         deltas = self._deltas(org_id)
         recent = self._recent(org_id)
         awaiting = self._by_status(org_id, WorkOrderStatus.AWAITING_ASSIGNMENT)
+        pending = self._pending_approvals(org_id)
         return schemas.DashboardSummary(
             totals=totals,
             deltas=deltas,
             recent_work_orders=recent,
             awaiting_assignment=awaiting,
+            pending_approvals=pending,
         )
 
     # ------------------------------------------------------------------ #
@@ -75,11 +78,22 @@ class DashboardService:
             )
         ).scalar_one()
 
+        pending = self.db.execute(
+            select(func.count())
+            .select_from(User)
+            .where(
+                User.organization_id == org_id,
+                User.status == UserStatus.PENDING_APPROVAL,
+                User.deleted_at.is_(None),
+            )
+        ).scalar_one()
+
         return schemas.KpiTotals(
             work_orders=int(work_orders),
             completed_work_orders=int(completed),
             invoices=int(invoices),
             awaiting_assignment=int(awaiting),
+            pending_approvals=int(pending),
         )
 
     def _deltas(self, org_id: uuid.UUID) -> schemas.KpiDeltas:
@@ -124,6 +138,23 @@ class DashboardService:
             .all()
         )
         return [schemas.RecentWorkOrder.model_validate(r) for r in rows]
+
+    def _pending_approvals(self, org_id: uuid.UUID) -> list[schemas.PendingEmployee]:
+        rows = (
+            self.db.execute(
+                select(User)
+                .where(
+                    User.organization_id == org_id,
+                    User.status == UserStatus.PENDING_APPROVAL,
+                    User.deleted_at.is_(None),
+                )
+                .order_by(User.created_at.asc())  # oldest first — approve in order
+                .limit(_PENDING_LIMIT)
+            )
+            .scalars()
+            .all()
+        )
+        return [schemas.PendingEmployee.model_validate(r) for r in rows]
 
     def _by_status(
         self, org_id: uuid.UUID, status: WorkOrderStatus

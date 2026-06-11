@@ -11,7 +11,7 @@ from datetime import datetime, timezone
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from app.models.enums import SubscriptionStatus, UserRole
+from app.models.enums import SubscriptionStatus, UserRole, UserStatus
 from app.models.organization import Organization
 from app.models.token import PasswordResetToken, RefreshToken
 from app.models.user import User
@@ -58,7 +58,29 @@ class AuthRepository:
         stmt = select(Organization.id).where(Organization.slug == slug).limit(1)
         return self.db.execute(stmt).first() is not None
 
-    # ---- Sign-up (organization + first admin) ----
+    # ---- Sign-up (single-tenant: everyone joins the one organization) ----
+    def get_default_organization(self) -> Organization | None:
+        """The organization self-registrations join.
+
+        This is an internal, single-tenant app: new employees join the
+        organization run by the business. We resolve that as the org of the
+        founding (earliest-created) admin — deterministic, and robust to any
+        legacy orgs left over from earlier multi-org behaviour. Falls back to the
+        earliest org if no admin exists yet.
+        """
+        by_admin = (
+            select(Organization)
+            .join(User, User.organization_id == Organization.id)
+            .where(User.role == UserRole.ADMIN, User.deleted_at.is_(None))
+            .order_by(User.created_at.asc())
+            .limit(1)
+        )
+        org = self.db.execute(by_admin).scalars().first()
+        if org is not None:
+            return org
+        earliest = select(Organization).order_by(Organization.created_at.asc()).limit(1)
+        return self.db.execute(earliest).scalars().first()
+
     def create_organization(self, *, name: str, slug: str) -> Organization:
         org = Organization(
             name=name,
@@ -78,6 +100,7 @@ class AuthRepository:
         hashed_password: str,
         full_name: str,
         role: UserRole,
+        status: UserStatus = UserStatus.ACTIVE,
     ) -> User:
         user = User(
             organization_id=organization_id,
@@ -85,7 +108,8 @@ class AuthRepository:
             hashed_password=hashed_password,
             full_name=full_name,
             role=role,
-            is_active=True,
+            status=status,
+            is_active=(status == UserStatus.ACTIVE),
         )
         self.db.add(user)
         self.db.flush()

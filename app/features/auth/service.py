@@ -27,7 +27,7 @@ from app.core.exceptions import (
     ValidationError,
 )
 from app.core.logging import get_logger
-from app.models.enums import UserRole
+from app.models.enums import UserRole, UserStatus
 from app.core.security import (
     create_access_token,
     create_password_reset_token,
@@ -41,6 +41,9 @@ from app.features.auth.repository import AuthRepository
 from app.models.user import User
 
 logger = get_logger(__name__)
+
+# Shown when a still-pending account attempts to sign in (business requirement 7).
+PENDING_APPROVAL_MESSAGE = "Your account is awaiting administrator approval."
 
 
 class AuthService:
@@ -70,28 +73,46 @@ class AuthService:
     # ------------------------------------------------------------------ #
     # Register (public self-serve sign-up)
     # ------------------------------------------------------------------ #
-    def register(self, data: schemas.RegisterRequest) -> schemas.TokenResponse:
+    def register(self, data: schemas.RegisterRequest) -> schemas.RegisterResponse:
+        """Self-serve sign-up for this internal, single-tenant application.
+
+        New users join the one organization as an EMPLOYEE with status
+        PENDING_APPROVAL — never as an admin, and never auto-logged-in. They
+        cannot sign in until an administrator approves the account.
+        """
         email = data.email.lower().strip()
         if self.repo.email_exists(email):
             raise ConflictError("An account with this email already exists")
 
         full_name = (data.full_name or "").strip() or _name_from_email(email)
-        org_name = (data.organization_name or "").strip() or f"{full_name}'s Organization"
-        slug = self._unique_slug(org_name)
 
-        org = self.repo.create_organization(name=org_name, slug=slug)
-        user = self.repo.create_user(
+        # Single-tenant: attach to the existing organization. Bootstrap one only
+        # if the app has never been seeded (so the very first sign-up still works).
+        org = self.repo.get_default_organization()
+        if org is None:
+            org = self.repo.create_organization(
+                name=settings.SUPERADMIN_ORG_NAME,
+                slug=self._unique_slug(settings.SUPERADMIN_ORG_NAME),
+            )
+
+        self.repo.create_user(
             organization_id=org.id,
             email=email,
             hashed_password=hash_password(data.password),
             full_name=full_name,
-            role=UserRole.ADMIN,
+            role=UserRole.EMPLOYEE,
+            status=UserStatus.PENDING_APPROVAL,
         )
 
-        tokens = self._issue_tokens(user)
         self.db.commit()
-        logger.info("New organization '%s' registered by %s", org_name, email)
-        return tokens
+        logger.info("New user %s registered (pending approval)", email)
+        return schemas.RegisterResponse(
+            message=(
+                "Registration successful. Your account is awaiting administrator "
+                "approval — you'll be able to sign in once it's approved."
+            ),
+            status=UserStatus.PENDING_APPROVAL.value,
+        )
 
     def _unique_slug(self, name: str) -> str:
         base = _slugify(name) or "org"
@@ -114,6 +135,8 @@ class AuthService:
         )
         if not user or not password_ok:
             raise AuthenticationError("Incorrect email or password")
+        if user.status == UserStatus.PENDING_APPROVAL:
+            raise AuthenticationError(PENDING_APPROVAL_MESSAGE)
         if not user.is_active:
             raise AuthenticationError("User account is deactivated")
         if (

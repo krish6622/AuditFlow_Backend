@@ -19,15 +19,17 @@ def get_auth_service(db: Session = Depends(get_db)) -> AuthService:
 
 @router.post(
     "/register",
-    response_model=schemas.TokenResponse,
+    response_model=schemas.RegisterResponse,
     status_code=status.HTTP_201_CREATED,
 )
 def register(
     data: schemas.RegisterRequest,
     service: AuthService = Depends(get_auth_service),
-) -> schemas.TokenResponse:
-    """Public sign-up: creates a new organization + its Organization Admin and
-    returns an access/refresh token pair (auto-login)."""
+) -> schemas.RegisterResponse:
+    """Public sign-up: creates an EMPLOYEE awaiting administrator approval.
+
+    No tokens are returned — the account cannot sign in until an admin approves
+    it. (This is an internal, single-tenant app, not a multi-tenant SaaS.)"""
     return service.register(data)
 
 
