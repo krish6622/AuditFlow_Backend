@@ -24,6 +24,7 @@ from app.models.enums import (
     WorkOrderCategory,
     WorkOrderStatus,
 )
+from app.models.customer import Customer
 from app.models.user import User
 from app.models.work_order import WorkOrder, WorkOrderNote
 
@@ -57,6 +58,21 @@ class WorkOrderService:
             # Super admins have no tenant; the platform role can't own work orders.
             raise ValidationError("This account is not associated with an organization")
         return user.organization_id
+
+    def _validate_customer(
+        self, org_id: uuid.UUID, customer_id: uuid.UUID | None
+    ) -> uuid.UUID | None:
+        """Ensure a linked customer exists in the same organization (or None)."""
+        if customer_id is None:
+            return None
+        exists = self.db.execute(
+            select(Customer.id).where(
+                Customer.id == customer_id, Customer.organization_id == org_id
+            )
+        ).first()
+        if exists is None:
+            raise ValidationError("Selected customer was not found")
+        return customer_id
 
     # ------------------------------------------------------------------ #
     # Notification helpers (added to the session; the caller commits)
@@ -155,6 +171,7 @@ class WorkOrderService:
             organization_id=org_id,
             category=data.category,
             category_other=category_other,
+            customer_id=self._validate_customer(org_id, data.customer_id),
             customer_name=data.customer_name.strip(),
             contact_number=data.contact_number.strip(),
             assignee_id=assignee_id,

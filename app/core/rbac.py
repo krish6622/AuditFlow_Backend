@@ -64,9 +64,12 @@ _ROLE_PERMISSIONS: dict[UserRole, frozenset[str]] = {
             REPORT_VIEW,
         }
     ),
-    # EMPLOYEE can raise requests and progress their own assigned work.
+    # EMPLOYEE can raise requests and progress their own assigned work, and may
+    # view/search the customer master to pick a client when raising a request
+    # (read-only — never edits customer master data).
     UserRole.EMPLOYEE: frozenset(
         {
+            CUSTOMER_VIEW,
             WORKORDER_CREATE_REQUEST,
             WORKORDER_VIEW_ASSIGNED,
             WORKORDER_UPDATE_STATUS,

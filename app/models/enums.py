@@ -51,6 +51,21 @@ class AuditAction(str, enum.Enum):
     STATUS_DEACTIVATED = "status_deactivated"
     USER_DELETED = "user_deleted"          # soft delete
 
+    # ---- Customer master-data changes (entity = customers) ----
+    CUSTOMER_CREATED = "customer_created"
+    CUSTOMER_UPDATED = "customer_updated"
+    CUSTOMER_DELETED = "customer_deleted"
+    CUSTOMER_ACTIVATED = "customer_activated"
+    CUSTOMER_DEACTIVATED = "customer_deactivated"
+
+
+class CustomerType(str, enum.Enum):
+    """Client category. Elangovan Associates maintains two registers — GST
+    clients and Income-Tax clients — kept here as ``customer_type``."""
+
+    GST = "gst"
+    INCOME_TAX = "income_tax"
+
 
 class NotificationType(str, enum.Enum):
     """In-app notification categories tied to the work-order workflow."""

@@ -1,8 +1,9 @@
 """Small operational CLI.
 
 Usage:
-    python -m app.cli seed-admin     # create/ensure the bootstrap org + first ADMIN
-    python -m app.cli seed-demo      # seed-admin + sample employees & audit activity
+    python -m app.cli seed-admin      # create/ensure the bootstrap org + first ADMIN
+    python -m app.cli seed-demo       # seed-admin + sample employees & audit activity
+    python -m app.cli seed-customers  # one-time import of the GST + Income-Tax registers
 
 Kept dependency-free (no Typer/Click) so it runs anywhere the app runs.
 """
@@ -125,7 +126,41 @@ def seed_demo() -> None:
         logger.info("Demo data seeded (org='%s').", settings.SUPERADMIN_ORG_NAME)
 
 
-_COMMANDS = {"seed-admin": seed_admin, "seed-demo": seed_demo}
+def seed_customers() -> None:
+    """One-time import of the legacy GST + Income-Tax client registers.
+
+    Imports into the bootstrap admin's organization and applies duplicate
+    detection (GST > PAN > Mobile > Email), so re-running never creates
+    duplicates. Reads local CSV/XLSX under ``CUSTOMER_SEED_DIR`` if present,
+    otherwise the shared Google Sheets. Not exposed to end users.
+    """
+    seed_admin()
+
+    from app.features.customers.seed import import_customers
+
+    email = settings.SUPERADMIN_EMAIL.lower()
+    with SessionLocal() as db:
+        admin = db.execute(select(User).where(User.email == email)).scalar_one()
+        summary = import_customers(db, admin)
+
+    logger.info("Customer import complete: %s", summary)
+    if summary.errors:
+        for err in summary.errors:
+            logger.warning("  - %s", err)
+        print("\nCustomer import finished WITH WARNINGS:")
+        for err in summary.errors:
+            print(f"  ! {err}")
+    print(
+        f"\nImported customers — created={summary.created}, "
+        f"updated={summary.updated}, skipped(exact dup)={summary.skipped}."
+    )
+
+
+_COMMANDS = {
+    "seed-admin": seed_admin,
+    "seed-demo": seed_demo,
+    "seed-customers": seed_customers,
+}
 
 
 def main() -> int:

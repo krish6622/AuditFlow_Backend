@@ -51,5 +51,7 @@ class AuditService:
             performed_by_name=entry.performed_by.full_name if entry.performed_by else None,
             affected_user_id=entry.affected_user_id,
             affected_user_name=entry.affected_user.full_name if entry.affected_user else None,
+            customer_id=entry.customer_id,
+            customer_name=entry.entity_name,
             timestamp=entry.created_at,
         )

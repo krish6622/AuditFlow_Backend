@@ -8,6 +8,7 @@ from app.models.audit_log import AuditLog
 from app.models.customer import Customer
 from app.models.enums import (
     AuditAction,
+    CustomerType,
     InvoiceStatus,
     NotificationType,
     SubscriptionStatus,
@@ -49,6 +50,7 @@ __all__ = [
     "NotificationType",
     "UserRole",
     "AuditAction",
+    "CustomerType",
     "SubscriptionStatus",
     "WorkOrderStatus",
     "WorkOrderPriority",
