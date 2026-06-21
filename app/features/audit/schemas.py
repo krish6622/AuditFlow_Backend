@@ -24,6 +24,10 @@ class AuditLogRead(BaseModel):
     performed_by_name: str | None
     affected_user_id: uuid.UUID | None
     affected_user_name: str | None
+    # Set for customer-master changes (``entity_name`` is a snapshot that
+    # survives a hard delete; ``customer_id`` is NULL once the row is gone).
+    customer_id: uuid.UUID | None = None
+    customer_name: str | None = None
     timestamp: datetime
 
 

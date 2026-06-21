@@ -57,17 +57,44 @@ class AuditRepository:
         )
         return list(rows), total
 
+    def list_for_customer(
+        self, *, organization_id: uuid.UUID, customer_id: uuid.UUID, limit: int = 100
+    ) -> list[AuditLog]:
+        """The audit trail for one customer (newest first), actor eagerly loaded."""
+        rows = (
+            self.db.execute(
+                select(AuditLog)
+                .where(
+                    AuditLog.organization_id == organization_id,
+                    AuditLog.customer_id == customer_id,
+                )
+                .options(joinedload(AuditLog.performed_by))
+                .order_by(AuditLog.created_at.desc())
+                .limit(limit)
+            )
+            .scalars()
+            .all()
+        )
+        return list(rows)
+
     def record(
         self,
         *,
         organization_id: uuid.UUID,
         performed_by_user_id: uuid.UUID | None,
-        affected_user_id: uuid.UUID | None,
+        affected_user_id: uuid.UUID | None = None,
         action: AuditAction,
         old_role: UserRole | None = None,
         new_role: UserRole | None = None,
+        customer_id: uuid.UUID | None = None,
+        entity_name: str | None = None,
     ) -> AuditLog:
-        """Append one audit entry (not committed — the caller commits)."""
+        """Append one audit entry (not committed — the caller commits).
+
+        User changes set ``affected_user_id``; customer changes set
+        ``customer_id`` and snapshot the readable ``entity_name`` so the trail
+        survives a hard delete (the FK is ``ON DELETE SET NULL``).
+        """
         entry = AuditLog(
             organization_id=organization_id,
             performed_by_user_id=performed_by_user_id,
@@ -75,6 +102,8 @@ class AuditRepository:
             action=action,
             old_role=old_role,
             new_role=new_role,
+            customer_id=customer_id,
+            entity_name=entity_name,
         )
         self.db.add(entry)
         return entry

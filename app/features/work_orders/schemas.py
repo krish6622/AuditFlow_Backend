@@ -35,6 +35,9 @@ def _require_other_when_others(
 class WorkOrderCreate(BaseModel):
     category: WorkOrderCategory
     category_other: str | None = Field(default=None, max_length=120)
+    # Link to the customer master (set by the customer lookup). When provided,
+    # customer_name / contact_number are auto-populated from this record.
+    customer_id: uuid.UUID | None = None
     customer_name: str = Field(min_length=1, max_length=255)
     contact_number: str = Field(min_length=1, max_length=40, description="Required")
     description: str = Field(min_length=1, description="Work description")
@@ -59,6 +62,7 @@ class WorkOrderUpdate(BaseModel):
 
     category: WorkOrderCategory | None = None
     category_other: str | None = Field(default=None, max_length=120)
+    customer_id: uuid.UUID | None = None
     customer_name: str | None = Field(default=None, min_length=1, max_length=255)
     contact_number: str | None = Field(default=None, max_length=40)
     description: str | None = Field(default=None, min_length=1)
@@ -96,6 +100,7 @@ class WorkOrderRead(BaseModel):
     number: str
     category: WorkOrderCategory | None
     category_other: str | None
+    customer_id: uuid.UUID | None
     customer_name: str | None
     contact_number: str | None
     assignee_id: uuid.UUID | None
